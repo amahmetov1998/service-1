@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from .healthcheck import router as healthcheck_router
-from .user_phones import router as user_phones_router
+from .users import router as user_phones_router
 
 router = APIRouter()
 router.include_router(healthcheck_router)

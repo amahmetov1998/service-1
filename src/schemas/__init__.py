@@ -3,7 +3,6 @@ __all__ = [
     "PhoneCreateRequest",
     "UserCreateResponse",
     "UserPhonesResponse",
-    "UserDeleteResponse",
     "UserUpdateResponse",
     "UserUpdateRequest",
     "PhoneDetailAPIRequest",
@@ -19,7 +18,6 @@ from .user import (
     UserPhonesResponse,
     UserUpdateResponse,
     UserUpdateRequest,
-    UserDeleteResponse,
 )
 
 from .phone import PhoneResponse, PhoneCreateRequest

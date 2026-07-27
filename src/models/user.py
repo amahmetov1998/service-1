@@ -5,7 +5,7 @@ from sqlalchemy.orm import (
     relationship,
 )
 
-from enums import UserStatus
+from src.core.enums import UserStatus
 from .base import Base
 from typing import TYPE_CHECKING
 
@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class User(Base):
+    """Модель номера телефона"""
+
     first_name: Mapped[str] = mapped_column(String(50))
     last_name: Mapped[str] = mapped_column(String(50))
     email: Mapped[str] = mapped_column(String(100), unique=True)

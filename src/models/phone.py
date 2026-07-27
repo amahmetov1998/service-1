@@ -7,7 +7,7 @@ from sqlalchemy.orm import (
     relationship,
 )
 
-from enums import PhoneType, OperatorType, RegionType
+from src.core.enums import PhoneType, OperatorType, RegionType
 from .base import Base
 
 from typing import TYPE_CHECKING
@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 
 class Phone(Base):
+    """Модель номера телефона"""
+
     user_uuid: Mapped[UUID] = mapped_column(
         ForeignKey("users.uuid", ondelete="CASCADE"), nullable=False
     )

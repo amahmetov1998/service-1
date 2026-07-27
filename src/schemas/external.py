@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from enums import OperatorType, RegionType
+from src.core.enums import OperatorType, RegionType
 
 
 class PhoneDetailAPIRequest(BaseModel):

@@ -1,16 +1,27 @@
 import uvicorn
 import asyncio
 
-from config import settings
+from fastapi import FastAPI
+
+from application import create_app
+from src.config import settings
+from src.core.app_dependencies import AppDependencies
+from src.core.factory import create_dependencies
+
+
+def get_app() -> FastAPI:
+    dependencies: AppDependencies = create_dependencies()
+    app: FastAPI = create_app(dependencies)
+    return app
 
 
 async def main() -> None:
     uvicorn.run(
-        "application:get_app",
+        "main:get_app",
         host=settings.run.host,
         port=settings.run.port,
-        reload=True,
-        factory=True,
+        reload=settings.run.reload,
+        factory=settings.run.factory,
     )
 
 

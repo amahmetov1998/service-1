@@ -4,12 +4,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from config import settings
 
-from typing import AsyncGenerator
-
-
-class DatabaseHelper:
+class DatabaseManager:
 
     def __init__(
         self,
@@ -36,23 +32,5 @@ class DatabaseHelper:
             class_=AsyncSession,
         )
 
-    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
-        async with self.session_factory() as session:
-            try:
-                yield session
-            except Exception:
-                await session.rollback()
-                raise
-
     async def dispose(self) -> None:
         await self.engine.dispose()
-
-
-db_helper = DatabaseHelper(
-    url=str(settings.db.url),
-    echo=settings.db.echo,
-    echo_pool=settings.db.echo_pool,
-    max_overflow=settings.db.max_overflow,
-    pool_size=settings.db.pool_size,
-    pool_pre_ping=settings.db.pool_pre_ping,
-)

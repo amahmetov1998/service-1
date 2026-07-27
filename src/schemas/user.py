@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from .phone import PhoneCreateRequest, PhoneResponse
 from uuid import UUID
-from enums import UserStatus
+from src.core.enums import UserStatus
 from .base import BaseResponse
 from datetime import datetime
 
@@ -18,7 +18,6 @@ class UserCreateResponse(UserCreateRequest, BaseResponse):
 
 
 class UserUpdateRequest(BaseModel):
-    uuid: UUID
     first_name: str | None = None
     last_name: str | None = None
     email: EmailStr | None = None
@@ -31,10 +30,6 @@ class UserUpdateResponse(BaseResponse):
     email: EmailStr
     status: UserStatus
     created_at: datetime
-
-
-class UserDeleteResponse(BaseResponse):
-    uuid: UUID
 
 
 class UserPhonesResponse(BaseResponse):

@@ -1,5 +1,5 @@
-from models import User
-from schemas import PhoneDetailAPIResponse, PhoneResponse, UserPhonesResponse
+from src.models import User
+from src.schemas import PhoneDetailAPIResponse, PhoneResponse, UserPhonesResponse
 
 
 def enrich_phone_numbers(
