@@ -1,3 +1,5 @@
-from .phone import enrich_phone_numbers
+from .cache_keys import get_user_cache_key
 
-__all__ = ["enrich_phone_numbers"]
+__all__ = [
+    "get_user_cache_key",
+]

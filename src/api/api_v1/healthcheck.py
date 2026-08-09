@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from src.clients import PhoneClient
-from src.core.dependencies import get_phone_client
+from src.schemas import HealthCheck
 
 router = APIRouter()
 
 
 @router.get("/healthcheck")
-async def healthcheck() -> dict[str, str]:
-    return {"status": "ok"}
+async def healthcheck() -> HealthCheck:
+    return HealthCheck(status="ok")

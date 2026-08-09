@@ -1,13 +1,16 @@
 from uuid import UUID
 
-from sqlalchemy import select, delete, update
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import EmailStr
+from sqlalchemy import select, update, func
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Result
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src import mappers as mapping
+from src.enums import PhoneSyncStatus
 from src.models import User, Phone
-from src.schemas import UserCreateRequest, UserUpdateRequest, PhoneDetailAPIResponse
+from src.schemas import UserCreateRequest, UserUpdateRequest
 
 
 class UserRepository:
@@ -17,47 +20,29 @@ class UserRepository:
     ) -> None:
         self.session = session
 
-    async def create_user_with_phones(
+    async def create_user(
         self,
         payload: UserCreateRequest,
-        phone_details_json: list[dict],
-    ) -> User:
-        user = User(
-            first_name=payload.first_name,
-            last_name=payload.last_name,
-            email=payload.email,
+        phone_sync_status: PhoneSyncStatus,
+    ) -> User | None:
+        stmt = (
+            insert(User)
+            .values(
+                first_name=payload.first_name,
+                last_name=payload.last_name,
+                phone_sync_status=phone_sync_status,
+                email=payload.email,
+            )
+            .on_conflict_do_nothing(index_elements=[User.email])
+            .returning(User)
         )
-        phone_details = [
-            PhoneDetailAPIResponse.model_validate(item) for item in phone_details_json
-        ]
-        phone_details_map = {item.phone_number: item for item in phone_details}
-        phones = []
-        for phone in payload.phone_numbers:
-            detail = phone_details_map.get(phone.phone_number)
-            if detail:
-                phones.append(
-                    Phone(
-                        phone_number=phone.phone_number,
-                        phone_type=phone.phone_type,
-                        is_verified=phone.is_verified,
-                        operator_type=detail.operator_type,
-                        region_type=detail.region_type,
-                        is_spam=detail.is_spam,
-                    )
-                )
+        result: Result = await self.session.execute(stmt)
+        user: User | None = result.scalar_one_or_none()
 
-        user.phone_numbers = phones
-        self.session.add(user)
         return user
 
     async def get_user_by_email(self, email: str) -> User | None:
         stmt = select(User).where(User.email == email)
-        result: Result = await self.session.execute(stmt)
-        user: User | None = result.scalar_one_or_none()
-        return user
-
-    async def get_user_by_uuid(self, uuid: UUID) -> User | None:
-        stmt = select(User).where(User.uuid == uuid)
         result: Result = await self.session.execute(stmt)
         user: User | None = result.scalar_one_or_none()
         return user
@@ -73,7 +58,15 @@ class UserRepository:
         return user
 
     async def delete_user(self, user_uuid: UUID) -> User | None:
-        stmt = delete(User).where(User.uuid == user_uuid).returning(User)
+        stmt = (
+            update(User)
+            .where(User.uuid == user_uuid)
+            .values(
+                is_deleted=True,
+                updated_at=func.now(),
+            )
+            .returning(User)
+        )
         result: Result = await self.session.execute(stmt)
         user: User | None = result.scalar_one_or_none()
         return user
@@ -83,8 +76,57 @@ class UserRepository:
     ) -> User | None:
         values = payload.model_dump(exclude_unset=True)
         stmt = (
-            update(User).where(User.uuid == user_uuid).values(**values).returning(User)
+            update(User)
+            .where(User.uuid == user_uuid)
+            .values(
+                **values,
+                updated_at=func.now(),
+            )
+            .returning(User)
         )
         result: Result = await self.session.execute(stmt)
         user: User | None = result.scalar_one_or_none()
         return user
+
+    async def get_pending_users(self) -> list[User]:
+        stmt = (
+            select(User)
+            .where(User.phone_sync_status == PhoneSyncStatus.PENDING)
+            .options(selectinload(User.phone_numbers))
+        )
+        result: Result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def update_user_phone_status(self, user_uuid: UUID) -> PhoneSyncStatus:
+        stmt = (
+            update(User)
+            .where(User.uuid == user_uuid)
+            .values(phone_sync_status=PhoneSyncStatus.DONE)
+            .returning(User.phone_sync_status)
+        )
+
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
+    async def create_phones(
+        self, payload: UserCreateRequest, user_uuid: UUID
+    ) -> list[Phone]:
+        phones_payload = mapping.phones_schema_to_dict(
+            payload=payload, user_uuid=user_uuid
+        )
+        result = await self.session.execute(
+            insert(Phone)
+            .on_conflict_do_nothing(index_elements=[Phone.phone_number])
+            .returning(Phone),
+            phones_payload,
+        )
+        return list(result.scalars().all())
+
+    async def lock_email(self, email: EmailStr) -> None:
+        await self.session.execute(
+            select(
+                func.pg_advisory_xact_lock(
+                    func.hashtextextended(email.lower(), 0),
+                ),
+            )
+        )

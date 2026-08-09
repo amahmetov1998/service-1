@@ -1,23 +1,27 @@
 __all__ = [
     "UserCreateRequest",
     "PhoneCreateRequest",
-    "UserCreateResponse",
     "UserPhonesResponse",
     "UserUpdateResponse",
     "UserUpdateRequest",
     "PhoneDetailAPIRequest",
     "PhoneDetailAPIResponse",
     "PhoneResponse",
+    "HealthCheck",
+    "PhoneNumbers",
 ]
 
-from .external import PhoneDetailAPIRequest, PhoneDetailAPIResponse
-
+from .healthcheck import HealthCheck
+from .phone import (
+    PhoneResponse,
+    PhoneCreateRequest,
+    PhoneDetailAPIRequest,
+    PhoneDetailAPIResponse,
+    PhoneNumbers,
+)
 from .user import (
     UserCreateRequest,
-    UserCreateResponse,
     UserPhonesResponse,
     UserUpdateResponse,
     UserUpdateRequest,
 )
-
-from .phone import PhoneResponse, PhoneCreateRequest

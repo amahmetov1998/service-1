@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import String, ForeignKey
@@ -7,10 +8,8 @@ from sqlalchemy.orm import (
     relationship,
 )
 
-from src.core.enums import PhoneType, OperatorType, RegionType
+from src.enums import PhoneType, OperatorType, RegionType
 from .base import Base
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .user import User

@@ -6,16 +6,18 @@ import httpx
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-
 from testcontainers.community.postgres import PostgresContainer
 from testcontainers.community.redis import RedisContainer
 from testcontainers.core.container import DockerContainer
 
 from src.application import create_app
-from src.cache import RedisCache
-from src.core.app_dependencies import AppDependencies
-from src.core.db import DatabaseManager
-from src.core.retry_strategy import RetryBudgetStrategy
+from src.config import (
+    RedisCache,
+    RetryBudgetStrategy,
+    AppDependencies,
+    create_engine,
+    create_session_factory,
+)
 
 
 @pytest.fixture(scope="session")
@@ -51,8 +53,6 @@ def apply_migrations(postgres_container):
     subprocess.run(
         [
             "alembic",
-            "-c",
-            "src/alembic.ini",
             "upgrade",
             "head",
         ],
@@ -60,16 +60,26 @@ def apply_migrations(postgres_container):
     )
 
 
-@pytest_asyncio.fixture
-async def test_db(apply_migrations, postgres_container):
+@pytest_asyncio.fixture(scope="session")
+async def test_engine(apply_migrations, postgres_container):
 
-    db = DatabaseManager(
+    engine = create_engine(
         url=postgres_container,
     )
 
-    yield db
+    yield engine
 
-    await db.dispose()
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def test_session_factory(test_engine):
+
+    session_factory = create_session_factory(
+        engine=test_engine,
+    )
+
+    yield session_factory
 
 
 @pytest.fixture(scope="session")
@@ -102,13 +112,12 @@ async def wait_service(service_url):
             pass
 
         await asyncio.sleep(1)
-    raise RuntimeError(f"Service {service_url} didn't start")
 
 
 @pytest_asyncio.fixture(scope="session")
 async def external_service(external_service_db):
 
-    container = DockerContainer("service-2:latest")
+    container = DockerContainer("service-2-app:latest")
 
     container.with_env(
         "APP_CONFIG__DB__URL",
@@ -138,45 +147,17 @@ async def http_client(external_service):
 
 
 @pytest_asyncio.fixture
-async def fake_http_client(external_service):
-
-    client = httpx.AsyncClient(
-        base_url="http://localhost:9999",
-        timeout=1,
-    )
-
-    yield client
-
-    await client.aclose()
-
-
-@pytest_asyncio.fixture
 async def dependencies(
-    test_db,
     test_redis,
+    test_engine,
+    test_session_factory,
     http_client,
 ) -> AppDependencies:
 
     return AppDependencies(
-        db=test_db,
+        engine=test_engine,
+        session_factory=test_session_factory,
         http_client=http_client,
-        redis=test_redis,
-        retry_strategy=RetryBudgetStrategy(
-            tokens_for_retry=10,
-            retry_budget_ratio=0.1,
-            max_retries=3,
-        ),
-    )
-
-
-@pytest_asyncio.fixture
-async def unavailable_dependencies(
-    test_db, test_redis, fake_http_client
-) -> AppDependencies:
-
-    return AppDependencies(
-        db=test_db,
-        http_client=fake_http_client,
         redis=test_redis,
         retry_strategy=RetryBudgetStrategy(
             tokens_for_retry=10,
@@ -192,7 +173,7 @@ def app(dependencies):
 
 
 @pytest_asyncio.fixture
-async def client(app):
+async def test_client(app):
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)
 
@@ -203,18 +184,146 @@ async def client(app):
             yield client
 
 
+@pytest_asyncio.fixture
+async def unavailable_http_client(external_service):
+
+    client = httpx.AsyncClient(
+        base_url="http://localhost:9999",
+        timeout=1,
+    )
+
+    yield client
+
+    await client.aclose()
+
+
+@pytest_asyncio.fixture
+async def unavailable_dependencies(
+    test_engine, test_session_factory, test_redis, unavailable_http_client
+) -> AppDependencies:
+
+    return AppDependencies(
+        engine=test_engine,
+        session_factory=test_session_factory,
+        http_client=unavailable_http_client,
+        redis=test_redis,
+        retry_strategy=RetryBudgetStrategy(
+            tokens_for_retry=10,
+            retry_budget_ratio=0.1,
+            max_retries=3,
+        ),
+    )
+
+
 @pytest.fixture
-def fake_app(unavailable_dependencies):
+def app_with_unavailable_service(unavailable_dependencies):
     return create_app(unavailable_dependencies)
 
 
 @pytest_asyncio.fixture
-async def fake_client(fake_app):
-    async with fake_app.router.lifespan_context(fake_app):
-        transport = ASGITransport(app=fake_app)
+async def client_with_unavailable_service(app_with_unavailable_service):
+    async with app_with_unavailable_service.router.lifespan_context(
+        app_with_unavailable_service
+    ):
+        transport = ASGITransport(app=app_with_unavailable_service)
 
         async with AsyncClient(
             transport=transport,
             base_url="http://test",
         ) as client:
             yield client
+
+
+@pytest.fixture
+def user_payload():
+    return {
+        "first_name": "Test",
+        "last_name": "Test",
+        "email": "test@example.com",
+        "phone_numbers": [
+            {
+                "phone_number": "+79991234567",
+                "phone_type": "mobile",
+                "is_verified": False,
+                "operator_type": "mts",
+                "region_type": "moscow_city",
+                "is_spam": False,
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def user_with_duplicate_email():
+    return {
+        "first_name": "Test",
+        "last_name": "Test",
+        "email": "test@example.com",
+        "phone_numbers": [
+            {
+                "phone_number": "+79991234567",
+                "phone_type": "mobile",
+                "is_verified": False,
+                "operator_type": "mts",
+                "region_type": "moscow_city",
+                "is_spam": False,
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def user_with_duplicate_phone():
+    return {
+        "first_name": "Test",
+        "last_name": "Test",
+        "email": "test2@example.com",
+        "phone_numbers": [
+            {
+                "phone_number": "+79991234567",
+                "phone_type": "mobile",
+                "is_verified": "false",
+                "operator_type": "mts",
+                "region_type": "moscow_city",
+                "is_spam": False,
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def cached_user():
+    return {
+        "first_name": "Test",
+        "last_name": "Test",
+        "email": "cache@example.com",
+        "phone_numbers": [
+            {
+                "phone_number": "+79991234568",
+                "phone_type": "mobile",
+                "is_verified": False,
+                "operator_type": "mts",
+                "region_type": "moscow_city",
+                "is_spam": False,
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def user_unavailable_service():
+    return {
+        "first_name": "Test",
+        "last_name": "Test",
+        "email": "fail@example.com",
+        "phone_numbers": [
+            {
+                "phone_number": "+79991234561",
+                "phone_type": "mobile",
+                "is_verified": "false",
+                "operator_type": "mts",
+                "region_type": "moscow_city",
+                "is_spam": False,
+            }
+        ],
+    }

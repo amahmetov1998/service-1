@@ -1,3 +1,6 @@
+from typing import TYPE_CHECKING
+
+import sqlalchemy as sa
 from sqlalchemy import String
 from sqlalchemy.orm import (
     Mapped,
@@ -5,16 +8,15 @@ from sqlalchemy.orm import (
     relationship,
 )
 
-from src.core.enums import UserStatus
+from src.enums import UserStatus, PhoneSyncStatus
 from .base import Base
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .phone import Phone
 
 
 class User(Base):
-    """Модель номера телефона"""
+    """Модель пользователя"""
 
     first_name: Mapped[str] = mapped_column(String(50))
     last_name: Mapped[str] = mapped_column(String(50))
@@ -25,3 +27,5 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    phone_sync_status: Mapped[PhoneSyncStatus]
+    is_deleted: Mapped[bool] = mapped_column(default=False, server_default=sa.false())
