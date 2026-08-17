@@ -1,17 +1,19 @@
-from src.enums import PhoneSyncStatus
-from src.models import User, Phone
+from typing import Any
+
+from src.models import User, Phone, PhoneSyncStatus
 from src.schemas import (
     PhoneDetailAPIResponse,
     PhoneResponse,
     UserPhonesResponse,
+    UserSyncResult,
 )
 
 
-def response_to_schema(
-    phone_details_json: list[dict], user: User
+def dict_to_schema(
+    phone_details: list[dict[str, str]], user: User
 ) -> UserPhonesResponse:
     phone_details = [
-        PhoneDetailAPIResponse.model_validate(item) for item in phone_details_json
+        PhoneDetailAPIResponse.model_validate(item) for item in phone_details
     ]
     phone_details_map = {item.phone_number: item for item in phone_details}
     phones = []
@@ -38,8 +40,8 @@ def response_to_schema(
     )
 
 
-def user_phones_to_schema(
-    user: User, phones: list[Phone], status: PhoneSyncStatus
+def orm_to_schema(
+    user: User, phones: list[Phone], status: PhoneSyncStatus | None
 ) -> UserPhonesResponse:
     phones = [
         PhoneResponse(
@@ -60,3 +62,17 @@ def user_phones_to_schema(
         phone_numbers=phones,
         phone_sync_status=status,
     )
+
+
+def schema_to_dict(sync_results: list[UserSyncResult]) -> list[dict[str, str]]:
+    return [user.model_dump() for user in sync_results]
+
+
+def orm_to_dict(users: list[User]) -> list[dict[str, Any]]:
+    return [
+        {
+            "uuid": user.uuid,
+            "phone_sync_status": PhoneSyncStatus.PROCESSING,
+        }
+        for user in users
+    ]

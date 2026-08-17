@@ -3,7 +3,7 @@ name = "eldar-menties-project"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "Your Name",email = "you@example.com"}
+    { name = "Your Name", email = "you@example.com" }
 ]
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,6 +21,7 @@ dependencies = [
     "testcontainers[postgresql] (>=4.15.0,<5.0.0)",
     "pytest-asyncio (>=1.4.0,<2.0.0)",
     "alembic (>=1.19.1,<2.0.0)",
+    "pytest-cov (>=7.1.0,<8.0.0)",
 ]
 
 
@@ -32,3 +33,6 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"

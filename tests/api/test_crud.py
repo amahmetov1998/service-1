@@ -1,6 +1,6 @@
 import pytest
 
-from src.enums import PhoneSyncStatus
+from src.models import PhoneSyncStatus
 
 
 @pytest.mark.asyncio

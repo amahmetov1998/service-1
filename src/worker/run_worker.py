@@ -1,22 +1,40 @@
 import asyncio
 import signal
 
-from src.providers import (
-    create_work_dependencies,
-    create_phone_client,
-    create_uow_factory,
+import httpx
+
+from src.clients import ServicePhoneClient
+from src.config import (
+    RetryBudgetStrategy,
+    create_session_factory,
+    settings,
+    create_engine,
+    configure_logging,
 )
+from src.dependencies import get_uow
 from src.worker.main_worker import Worker
 
 
 async def run_worker():
-    deps = create_work_dependencies()
-
-    phone_client = create_phone_client(deps)
-    uow_factory = create_uow_factory(deps)
-
+    configure_logging(settings.logging)
+    client = httpx.AsyncClient(
+        base_url=settings.client.base_url,
+        timeout=settings.client.timeout,
+    )
+    retry_strategy = RetryBudgetStrategy(
+        retry_cost=settings.retry.retry_cost,
+        retry_budget_ratio=settings.retry.retry_budget_ratio,
+        max_retry_budget=settings.retry.max_retry_budget,
+    )
+    service_phone_client = ServicePhoneClient(
+        client=client,
+        retry_strategy=retry_strategy,
+    )
+    engine = create_engine(settings.db.url)
+    session_factory = create_session_factory(engine)
+    uow_factory = get_uow(session_factory)
     worker = Worker(
-        phone_client=phone_client,
+        service_phone_client=service_phone_client,
         uow_factory=uow_factory,
     )
 
@@ -40,8 +58,8 @@ async def run_worker():
                 pass
 
     finally:
-        await deps.engine.dispose()
-        await deps.http_client.aclose()
+        await engine.dispose()
+        await client.aclose()
 
 
 if __name__ == "__main__":

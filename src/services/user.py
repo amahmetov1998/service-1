@@ -2,29 +2,26 @@ import logging
 from typing import Callable
 from uuid import UUID
 
-import httpx
-
-from src import mappers as mapping
-from src.clients import PhoneClient
-from src.config import RedisCache, UnitOfWork
-from src.enums import PhoneSyncStatus
+from src.clients import ServicePhoneClient
+from src.config import RedisCache, ApplicationUnitOfWork
 from src.exceptions import (
-    RetriesLimitError,
     NotFoundError,
     ValidationError,
     InvalidRequestError,
     AlreadyExistsError,
     USER_NOT_FOUND,
     USER_EXISTS,
-    PHONE_DATA_ALREADY_EXISTS,
+    PHONE_DATA_EXISTS,
 )
-from src.models import User, Phone
+from src.exceptions import ServiceUnavailableError
+from src.mappers import phone as phone_mapper, user as user_mapper
+from src.models import User, Phone, PhoneSyncStatus
 from src.schemas import (
     UserCreateRequest,
     UserUpdateRequest,
     UserPhonesResponse,
+    PhoneCreateRequest,
 )
-from src.utils import get_user_cache_key
 
 log = logging.getLogger(__name__)
 
@@ -32,8 +29,8 @@ log = logging.getLogger(__name__)
 class UserService:
     def __init__(
         self,
-        phone_client: PhoneClient,
-        uow_factory: Callable[[], UnitOfWork],
+        phone_client: ServicePhoneClient,
+        uow_factory: Callable[[], ApplicationUnitOfWork],
         redis: RedisCache,
     ) -> None:
         self.uow_factory = uow_factory
@@ -44,27 +41,38 @@ class UserService:
         self,
         payload: UserCreateRequest,
     ) -> UserPhonesResponse:
-        user, phones = await self._create_user_with_phones(
-            payload=payload,
-            status=PhoneSyncStatus.PENDING,
-        )
-
-        synced = await self._sync_phones(payload=phones)
-        if synced:
+        user, phones = await self._create_user_with_phones(payload=payload)
+        service_payload = phone_mapper.orm_to_schema(phones=phones)
+        try:
+            await self.client.send_phones(payload=service_payload)
             log.info(
                 "Phone data synchronized successfully for user: uuid=%s",
                 user.uuid,
             )
-            status = await self._update_user_status(user_uuid=user.uuid)
-        else:
+            status = PhoneSyncStatus.DONE
+
+        except (
+            InvalidRequestError,
+            AlreadyExistsError,
+            ValidationError,
+        ) as e:
+            log.warning(
+                "Phone sync failed. Error type=%s, error=%s", type(e).__name__, e
+            )
+            status = PhoneSyncStatus.FAILED
+
+        except ServiceUnavailableError:
             status = PhoneSyncStatus.PENDING
-        return mapping.user_phones_to_schema(user, phones, status)
+
+        status = await self._update_user_status(user_uuid=user.uuid, status=status)
+
+        return user_mapper.orm_to_schema(user, phones, status)
 
     async def get_user(
         self,
         user_uuid: UUID,
     ) -> UserPhonesResponse:
-        key = get_user_cache_key(user_uuid=user_uuid)
+        key = self.__get_user_cache_key(user_uuid=user_uuid)
         cached_user = await self._get_cached_user(key=key)
         if cached_user:
             return cached_user
@@ -79,22 +87,18 @@ class UserService:
         self,
         user_uuid: UUID,
     ) -> None:
-
-        key = get_user_cache_key(user_uuid=user_uuid)
-        await self._invalidate_user_cache(key=key)
-
         async with self.uow_factory() as uow:
             user = await uow.users.delete_user(user_uuid=user_uuid)
         if not user:
             raise NotFoundError(USER_NOT_FOUND)
+        key = self.__get_user_cache_key(user_uuid=user_uuid)
+        await self._invalidate_user_cache(key=key)
 
     async def update_user(
         self,
         user_uuid: UUID,
         payload: UserUpdateRequest,
     ) -> User:
-        key = get_user_cache_key(user_uuid=user_uuid)
-        await self._invalidate_user_cache(key)
         async with self.uow_factory() as uow:
             if payload.email:
                 await uow.users.lock_email(email=payload.email)
@@ -105,37 +109,35 @@ class UserService:
                         payload.email,
                     )
                     raise AlreadyExistsError(USER_EXISTS)
-
-            user = await uow.users.update_user(user_uuid, payload=payload)
+            values = payload.model_dump(exclude_unset=True)
+            user = await uow.users.update_user(user_uuid=user_uuid, values=values)
         if not user:
             raise NotFoundError(USER_NOT_FOUND)
+        key = self.__get_user_cache_key(user_uuid=user_uuid)
+        await self._invalidate_user_cache(key=key)
         return user
 
     async def _create_user_with_phones(
-        self, payload: UserCreateRequest, status: PhoneSyncStatus
+        self, payload: UserCreateRequest
     ) -> tuple[User, list[Phone]]:
         async with self.uow_factory() as uow:
-            user = await uow.users.create_user(
-                payload=payload,
-                phone_sync_status=status,
-            )
+            values = payload.model_dump(exclude={"phone_numbers"})
+            user = await uow.users.create_user(values=values)
             if user is None:
                 log.warning(
                     "User already exists with email=%s",
                     payload.email,
                 )
                 raise AlreadyExistsError(USER_EXISTS)
-            phones = await uow.users.create_phones(
-                payload=payload,
-                user_uuid=user.uuid,
+            phones_payload = phone_mapper.schema_to_dict(
+                payload=payload, user_uuid=user.uuid
+            )
+            phones = await uow.phones.create_phones(
+                phones_payload=phones_payload,
             )
 
-            if len(phones) != len(payload.phone_numbers):
-                log.warning(
-                    "Phone(s) already exists with phone number(s)=%s",
-                    payload.phone_numbers,
-                )
-                raise AlreadyExistsError(PHONE_DATA_ALREADY_EXISTS)
+            self._handle_existing_numbers(phones=phones, payload=payload.phone_numbers)
+
         log.info("User created successfully: uuid=%s", user.uuid)
         return user, phones
 
@@ -147,55 +149,36 @@ class UserService:
                 raise NotFoundError(USER_NOT_FOUND)
             return user
 
-    async def _sync_phones(self, payload: list[Phone]) -> bool:
-        service_payload = mapping.phones_orm_to_dict(phones=payload)
-        try:
-            await self.client.post(payload=service_payload)
-            return True
-
-        except (
-            httpx.TimeoutException,
-            httpx.NetworkError,
-        ) as e:
-            log.warning("Service not available: %s", e)
-            return False
-        except (
-            RetriesLimitError,
-            InvalidRequestError,
-            AlreadyExistsError,
-            ValidationError,
-        ):
-            return False
-
-    async def _update_user_status(self, user_uuid: UUID) -> PhoneSyncStatus:
+    async def _update_user_status(
+        self, user_uuid: UUID, status: PhoneSyncStatus | None
+    ) -> PhoneSyncStatus:
         async with self.uow_factory() as uow:
-            status = await uow.users.update_user_phone_status(user_uuid=user_uuid)
+            status = await uow.users.update_user_phone_status(
+                user_uuid=user_uuid, status=status
+            )
             return status
 
     async def _fetch_phones_detail(self, user: User) -> UserPhonesResponse:
-        params = mapping.phones_orm_to_list(user=user)
+        params = phone_mapper.orm_to_dict(user=user)
 
         try:
-            response = await self.client.get(
+            phones = await self.client.get_phones(
                 params=params,
             )
-            phone_details_json = response.json()
-            user_with_phones = mapping.response_to_schema(phone_details_json, user)
-            return user_with_phones
-        except (
-            httpx.TimeoutException,
-            httpx.NetworkError,
-        ) as e:
-            log.warning("Service not available: %s", e)
-            return UserPhonesResponse.model_validate(user)
-
         except (
             InvalidRequestError,
             NotFoundError,
-            RetriesLimitError,
             ValidationError,
-        ):
+        ) as e:
+            log.warning(
+                "Phone sync failed. Error type=%s, error=%s", type(e).__name__, e
+            )
             return UserPhonesResponse.model_validate(user)
+
+        except ServiceUnavailableError:
+            return UserPhonesResponse.model_validate(user)
+
+        return user_mapper.dict_to_schema(phone_details=phones, user=user)
 
     async def _get_cached_user(self, key: str) -> UserPhonesResponse | None:
         cached = await self.cache.get(key)
@@ -210,3 +193,23 @@ class UserService:
 
     async def _invalidate_user_cache(self, key: str) -> None:
         await self.cache.delete(key)
+
+    @staticmethod
+    def _handle_existing_numbers(
+        phones: list[Phone], payload: list[PhoneCreateRequest]
+    ) -> None:
+        inserted = [phone.phone_number for phone in phones]
+        incoming = [phone.phone_number for phone in payload]
+        existing = list(set(incoming) - set(inserted))
+        if existing:
+            log.warning(
+                "Phone(s) already exists with phone number(s)=%s",
+                existing,
+            )
+            raise AlreadyExistsError(
+                message=PHONE_DATA_EXISTS, details={"phone_numbers": existing}
+            )
+
+    @staticmethod
+    def __get_user_cache_key(user_uuid: UUID) -> str:
+        return f"user:{user_uuid}"

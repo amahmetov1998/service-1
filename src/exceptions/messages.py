@@ -1,7 +1,0 @@
-VALIDATION = "Phone data validation failed"
-INVALID_REQUEST = "Invalid request format"
-PHONE_DATA_NOT_FOUND = "Phone data not found"
-USER_NOT_FOUND = "User not found"
-RETRIES_EXCEEDED = "Retry limit exceeded"
-PHONE_DATA_ALREADY_EXISTS = "Phone data already exists"
-USER_EXISTS = "User already exists"

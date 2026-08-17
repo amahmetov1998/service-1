@@ -8,7 +8,7 @@ from sqlalchemy.orm import (
     relationship,
 )
 
-from src.enums import PhoneType, OperatorType, RegionType
+from src.models import PhoneType, OperatorType, RegionType
 from .base import Base
 
 if TYPE_CHECKING:

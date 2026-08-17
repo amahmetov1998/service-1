@@ -5,9 +5,7 @@ from starlette.responses import JSONResponse
 
 from src.exceptions import (
     NotFoundError,
-    ValidationError,
     AlreadyExistsError,
-    InvalidRequestError,
 )
 
 log = logging.getLogger(__name__)
@@ -20,27 +18,7 @@ def register_errors_handlers(app):
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={
-                "detail": "Resource not found",
-            },
-        )
-
-    @app.exception_handler(ValidationError)
-    def validation_handler(request: Request, exc: ValidationError):
-
-        return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            content={
-                "detail": "Invalid request",
-            },
-        )
-
-    @app.exception_handler(InvalidRequestError)
-    def invalid_request_handler(request: Request, exc: InvalidRequestError):
-
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "detail": "Invalid request format",
+                "message": str(exc),
             },
         )
 
@@ -49,9 +27,7 @@ def register_errors_handlers(app):
 
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            content={
-                "detail": "Resource already exists",
-            },
+            content={"message": str(exc), "detail": exc.details},
         )
 
     @app.exception_handler(Exception)
@@ -68,6 +44,6 @@ def register_errors_handlers(app):
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
-                "detail": "Internal server error",
+                "message": "Internal server error",
             },
         )

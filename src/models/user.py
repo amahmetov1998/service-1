@@ -1,6 +1,5 @@
 from typing import TYPE_CHECKING
 
-import sqlalchemy as sa
 from sqlalchemy import String
 from sqlalchemy.orm import (
     Mapped,
@@ -8,7 +7,7 @@ from sqlalchemy.orm import (
     relationship,
 )
 
-from src.enums import UserStatus, PhoneSyncStatus
+from src.models import UserStatus, PhoneSyncStatus
 from .base import Base
 
 if TYPE_CHECKING:
@@ -27,5 +26,4 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    phone_sync_status: Mapped[PhoneSyncStatus]
-    is_deleted: Mapped[bool] = mapped_column(default=False, server_default=sa.false())
+    phone_sync_status: Mapped[PhoneSyncStatus | None]

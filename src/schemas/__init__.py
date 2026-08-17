@@ -9,6 +9,7 @@ __all__ = [
     "PhoneResponse",
     "HealthCheck",
     "PhoneNumbers",
+    "UserSyncResult",
 ]
 
 from .healthcheck import HealthCheck
@@ -24,4 +25,5 @@ from .user import (
     UserPhonesResponse,
     UserUpdateResponse,
     UserUpdateRequest,
+    UserSyncResult,
 )

@@ -1,16 +1,13 @@
+from typing import Any
 from uuid import UUID
 
-from pydantic import EmailStr
 from sqlalchemy import select, update, func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Result
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src import mappers as mapping
-from src.enums import PhoneSyncStatus
-from src.models import User, Phone
-from src.schemas import UserCreateRequest, UserUpdateRequest
+from src.models import User, PhoneSyncStatus
 
 
 class UserRepository:
@@ -22,17 +19,11 @@ class UserRepository:
 
     async def create_user(
         self,
-        payload: UserCreateRequest,
-        phone_sync_status: PhoneSyncStatus,
+        values: dict[str, Any],
     ) -> User | None:
         stmt = (
             insert(User)
-            .values(
-                first_name=payload.first_name,
-                last_name=payload.last_name,
-                phone_sync_status=phone_sync_status,
-                email=payload.email,
-            )
+            .values(**values)
             .on_conflict_do_nothing(index_elements=[User.email])
             .returning(User)
         )
@@ -50,7 +41,10 @@ class UserRepository:
     async def get_user_with_phones(self, user_uuid: UUID) -> User | None:
         stmt = (
             select(User)
-            .where(User.uuid == user_uuid)
+            .where(
+                User.uuid == user_uuid,
+                User.is_deleted.is_(False),
+            )
             .options(selectinload(User.phone_numbers))
         )
         result: Result = await self.session.execute(stmt)
@@ -61,27 +55,18 @@ class UserRepository:
         stmt = (
             update(User)
             .where(User.uuid == user_uuid)
-            .values(
-                is_deleted=True,
-                updated_at=func.now(),
-            )
+            .values(is_deleted=True)
             .returning(User)
         )
         result: Result = await self.session.execute(stmt)
         user: User | None = result.scalar_one_or_none()
         return user
 
-    async def update_user(
-        self, user_uuid: UUID, payload: UserUpdateRequest
-    ) -> User | None:
-        values = payload.model_dump(exclude_unset=True)
+    async def update_user(self, user_uuid: UUID, values: dict[str, str]) -> User | None:
         stmt = (
             update(User)
-            .where(User.uuid == user_uuid)
-            .values(
-                **values,
-                updated_at=func.now(),
-            )
+            .where(User.uuid == user_uuid, User.is_deleted.is_(False))
+            .values(**values)
             .returning(User)
         )
         result: Result = await self.session.execute(stmt)
@@ -93,40 +78,35 @@ class UserRepository:
             select(User)
             .where(User.phone_sync_status == PhoneSyncStatus.PENDING)
             .options(selectinload(User.phone_numbers))
+            .with_for_update(skip_locked=True)
         )
         result: Result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def update_user_phone_status(self, user_uuid: UUID) -> PhoneSyncStatus:
+    async def update_user_phone_status(
+        self, user_uuid: UUID, status: PhoneSyncStatus
+    ) -> PhoneSyncStatus:
         stmt = (
             update(User)
             .where(User.uuid == user_uuid)
-            .values(phone_sync_status=PhoneSyncStatus.DONE)
+            .values(phone_sync_status=status)
             .returning(User.phone_sync_status)
         )
 
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
-    async def create_phones(
-        self, payload: UserCreateRequest, user_uuid: UUID
-    ) -> list[Phone]:
-        phones_payload = mapping.phones_schema_to_dict(
-            payload=payload, user_uuid=user_uuid
-        )
-        result = await self.session.execute(
-            insert(Phone)
-            .on_conflict_do_nothing(index_elements=[Phone.phone_number])
-            .returning(Phone),
-            phones_payload,
-        )
-        return list(result.scalars().all())
-
-    async def lock_email(self, email: EmailStr) -> None:
+    async def lock_email(self, email: str) -> None:
         await self.session.execute(
             select(
                 func.pg_advisory_xact_lock(
                     func.hashtextextended(email.lower(), 0),
                 ),
             )
+        )
+
+    async def update_users_phone_status(self, users_dict) -> None:
+        await self.session.execute(
+            update(User),
+            users_dict,
         )

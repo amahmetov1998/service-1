@@ -29,36 +29,37 @@ class LoggingConfig(BaseModel):
 
 
 class RunConfig(BaseModel):
-    host: str = "0.0.0.0"
-    port: int = 8000
-    reload: bool = True
+    host: str
+    port: int
+    reload: bool
     factory: bool = True
 
 
 class RetryBudgetConfig(BaseModel):
-    retry_budget_ratio: float = 0.1
-    tokens_for_retry: int = 100
-    max_retries_global: int = 1
-    max_retries_local: int = 3
-    max_retry_delay_seconds: int = 60
+    retry_cost: int
+    retry_budget_ratio: float
+    max_retry_budget: int
+    max_retry_delay_seconds: int
 
 
 class RedisConfig(BaseModel):
     url: RedisDsn
-    cache_ttl_seconds: int = 3600
+    cache_ttl_seconds: int
+    socket_connect_timeout: float
+    socket_timeout: float
 
 
 class HTTPClientConfig(BaseModel):
-    base_url: str = "http://localhost:8080"
-    timeout: int = 10
+    base_url: str
+    timeout: int
 
 
 class DatabaseConfig(BaseModel):
     url: PostgresDsn
-    echo: bool = False
-    echo_pool: bool = False
-    max_overflow: int = 5
-    pool_size: int = 10
+    echo: bool
+    echo_pool: bool
+    max_overflow: int
+    pool_size: int
     pool_pre_ping: bool = True
 
 
@@ -73,9 +74,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     logging: LoggingConfig = LoggingConfig()
-    run: RunConfig = RunConfig()
-    retry: RetryBudgetConfig = RetryBudgetConfig()
-    client: HTTPClientConfig = HTTPClientConfig()
+    run: RunConfig
+    retry: RetryBudgetConfig
+    client: HTTPClientConfig
     redis: RedisConfig
     db: DatabaseConfig
 

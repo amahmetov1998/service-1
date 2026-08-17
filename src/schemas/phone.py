@@ -1,6 +1,6 @@
 from pydantic import BaseModel, field_validator, Field, ConfigDict
 
-from src.enums import PhoneType, OperatorType, RegionType
+from src.models import PhoneType, OperatorType, RegionType
 
 
 class PhoneCreateRequest(BaseModel):

@@ -10,6 +10,8 @@ class UserStatus(enum.StrEnum):
 class PhoneSyncStatus(enum.StrEnum):
     PENDING = "pending"
     DONE = "done"
+    FAILED = "failed"
+    PROCESSING = "processing"
 
 
 class PhoneType(enum.StrEnum):

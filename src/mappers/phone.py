@@ -1,21 +1,20 @@
+from typing import Any
 from uuid import UUID
 
-from src.models import User, Phone
+from src.models import Phone, User
 from src.schemas import PhoneDetailAPIRequest, PhoneNumbers, UserCreateRequest
 
 
-def phones_orm_to_dict(phones: list[Phone]) -> list[dict]:
-    return [
-        PhoneDetailAPIRequest.model_validate(phone).model_dump() for phone in phones
-    ]
+def orm_to_schema(phones: list[Phone]) -> list[PhoneDetailAPIRequest]:
+    return [PhoneDetailAPIRequest.model_validate(phone) for phone in phones]
 
 
-def phones_orm_to_list(user: User) -> list[str]:
+def orm_to_dict(user: User) -> dict[str, str]:
     phone_numbers = [phone.phone_number for phone in user.phone_numbers]
     return PhoneNumbers(phone_numbers=phone_numbers).model_dump()
 
 
-def phones_schema_to_dict(payload: UserCreateRequest, user_uuid: UUID) -> list[dict]:
+def schema_to_dict(payload: UserCreateRequest, user_uuid: UUID) -> list[dict[str, Any]]:
     return [
         {
             **phone.model_dump(),

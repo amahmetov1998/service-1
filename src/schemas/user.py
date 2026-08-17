@@ -3,8 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from src.enums import PhoneSyncStatus
-from src.enums import UserStatus
+from src.models import UserStatus, PhoneSyncStatus
 from .base import BaseResponse
 from .phone import PhoneCreateRequest, PhoneResponse
 
@@ -34,6 +33,14 @@ class UserCreateRequest(BaseModel):
     def validate_name(cls, v: str) -> str:
         return check_name(v)
 
+    @field_validator("phone_numbers", mode="after")
+    @classmethod
+    def validate_phone_numbers(cls, phone_numbers: list[PhoneCreateRequest]):
+        values = [phone.phone_number for phone in phone_numbers]
+        if len(values) != len(set(values)):
+            raise ValueError("Phone numbers must be unique")
+        return phone_numbers
+
 
 class UserUpdateRequest(BaseModel):
     first_name: str | None = Field(default=None, max_length=50)
@@ -61,4 +68,9 @@ class UserPhonesResponse(BaseResponse):
     last_name: str
     email: EmailStr
     phone_numbers: list[PhoneResponse]
+    phone_sync_status: PhoneSyncStatus | None
+
+
+class UserSyncResult(BaseResponse):
+    uuid: UUID
     phone_sync_status: PhoneSyncStatus

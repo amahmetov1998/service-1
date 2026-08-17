@@ -1,5 +1,5 @@
-from .client import PhoneClient
+from .service_phone_client import ServicePhoneClient
 
 __all__ = [
-    "PhoneClient",
+    "ServicePhoneClient",
 ]

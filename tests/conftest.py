@@ -10,14 +10,22 @@ from testcontainers.community.postgres import PostgresContainer
 from testcontainers.community.redis import RedisContainer
 from testcontainers.core.container import DockerContainer
 
+from src.api import healthcheck_router, user_phones_router
 from src.application import create_app
+from src.clients import ServicePhoneClient
 from src.config import (
     RedisCache,
     RetryBudgetStrategy,
-    AppDependencies,
     create_engine,
     create_session_factory,
 )
+from src.dependencies import (
+    get_redis,
+    get_session_factory,
+    get_retry_strategy,
+    get_service_phone_client,
+)
+from src.handlers import register_errors_handlers
 
 
 @pytest.fixture(scope="session")
@@ -61,7 +69,7 @@ def apply_migrations(postgres_container):
 
 
 @pytest_asyncio.fixture(scope="session")
-async def test_engine(apply_migrations, postgres_container):
+async def engine(apply_migrations, postgres_container):
 
     engine = create_engine(
         url=postgres_container,
@@ -73,10 +81,10 @@ async def test_engine(apply_migrations, postgres_container):
 
 
 @pytest_asyncio.fixture(scope="session")
-async def test_session_factory(test_engine):
+async def override_get_session_factory(engine):
 
     session_factory = create_session_factory(
-        engine=test_engine,
+        engine=engine,
     )
 
     yield session_factory
@@ -90,11 +98,13 @@ def redis_container():
         yield f"redis://{host}:{port}"
 
 
-@pytest_asyncio.fixture
-async def test_redis(redis_container):
+@pytest_asyncio.fixture(scope="session")
+async def override_get_redis(redis_container):
     redis = RedisCache(
         redis_url=redis_container,
-        cache_ttl_seconds=60,
+        cache_ttl_seconds=3600,
+        socket_timeout=0.2,
+        socket_connect_timeout=0.2,
     )
     yield redis
 
@@ -147,33 +157,55 @@ async def http_client(external_service):
 
 
 @pytest_asyncio.fixture
-async def dependencies(
-    test_redis,
-    test_engine,
-    test_session_factory,
-    http_client,
-) -> AppDependencies:
-
-    return AppDependencies(
-        engine=test_engine,
-        session_factory=test_session_factory,
-        http_client=http_client,
-        redis=test_redis,
-        retry_strategy=RetryBudgetStrategy(
-            tokens_for_retry=10,
-            retry_budget_ratio=0.1,
-            max_retries=3,
-        ),
+async def override_get_retry_strategy():
+    retry_strategy = RetryBudgetStrategy(
+        retry_cost=10,
+        retry_budget_ratio=0.1,
+        max_retry_budget=3,
     )
-
-
-@pytest.fixture
-def app(dependencies):
-    return create_app(dependencies)
+    yield retry_strategy
 
 
 @pytest_asyncio.fixture
-async def test_client(app):
+async def override_get_service_phone_client(http_client, override_get_retry_strategy):
+    service_phone_client = ServicePhoneClient(
+        client=http_client,
+        retry_strategy=override_get_retry_strategy,
+    )
+    yield service_phone_client
+
+
+@pytest.fixture
+def app():
+    app = create_app()
+    register_errors_handlers(app)
+    app.include_router(healthcheck_router)
+    app.include_router(user_phones_router)
+    return app
+
+
+@pytest.fixture
+def override_dependencies(
+    app,
+    override_get_redis,
+    override_get_session_factory,
+    override_get_retry_strategy,
+    override_get_service_phone_client,
+):
+    app.dependency_overrides[get_redis] = lambda: override_get_redis
+    app.dependency_overrides[get_session_factory] = lambda: override_get_session_factory
+    app.dependency_overrides[get_retry_strategy] = lambda: override_get_retry_strategy
+    app.dependency_overrides[get_service_phone_client] = (
+        lambda: override_get_service_phone_client
+    )
+
+    yield
+
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def test_client(app, override_dependencies):
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)
 
@@ -185,7 +217,7 @@ async def test_client(app):
 
 
 @pytest_asyncio.fixture
-async def unavailable_http_client(external_service):
+async def unavailable_http_client():
 
     client = httpx.AsyncClient(
         base_url="http://localhost:9999",
@@ -198,34 +230,33 @@ async def unavailable_http_client(external_service):
 
 
 @pytest_asyncio.fixture
-async def unavailable_dependencies(
-    test_engine, test_session_factory, test_redis, unavailable_http_client
-) -> AppDependencies:
-
-    return AppDependencies(
-        engine=test_engine,
-        session_factory=test_session_factory,
-        http_client=unavailable_http_client,
-        redis=test_redis,
-        retry_strategy=RetryBudgetStrategy(
-            tokens_for_retry=10,
-            retry_budget_ratio=0.1,
-            max_retries=3,
-        ),
+async def override_get_unavailable_service_phone_client(
+    unavailable_http_client, override_get_retry_strategy
+):
+    service_phone_client = ServicePhoneClient(
+        client=unavailable_http_client,
+        retry_strategy=override_get_retry_strategy,
     )
+    yield service_phone_client
 
 
 @pytest.fixture
-def app_with_unavailable_service(unavailable_dependencies):
-    return create_app(unavailable_dependencies)
+def override_unavailable_service(
+    app,
+    override_dependencies,
+    override_get_unavailable_service_phone_client,
+):
+    app.dependency_overrides[get_service_phone_client] = (
+        lambda: override_get_unavailable_service_phone_client
+    )
+
+    yield
 
 
 @pytest_asyncio.fixture
-async def client_with_unavailable_service(app_with_unavailable_service):
-    async with app_with_unavailable_service.router.lifespan_context(
-        app_with_unavailable_service
-    ):
-        transport = ASGITransport(app=app_with_unavailable_service)
+async def client_with_unavailable_service(app, override_unavailable_service):
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app)
 
         async with AsyncClient(
             transport=transport,
@@ -321,6 +352,25 @@ def user_unavailable_service():
                 "phone_number": "+79991234561",
                 "phone_type": "mobile",
                 "is_verified": "false",
+                "operator_type": "mts",
+                "region_type": "moscow_city",
+                "is_spam": False,
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def user_service_payload():
+    return {
+        "first_name": "Test",
+        "last_name": "Test",
+        "email": "test_service@example.com",
+        "phone_numbers": [
+            {
+                "phone_number": "+79991234569",
+                "phone_type": "mobile",
+                "is_verified": False,
                 "operator_type": "mts",
                 "region_type": "moscow_city",
                 "is_spam": False,

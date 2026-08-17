@@ -1,20 +1,22 @@
 class RetryBudgetStrategy:
     def __init__(
         self,
-        tokens_for_retry: int,
+        retry_cost: int,
         retry_budget_ratio: float,
-        max_retries: int,
+        max_retry_budget: int,
     ) -> None:
-        self.tokens_for_retry = tokens_for_retry
-        self.tokens_to_add_for_success = int(retry_budget_ratio * self.tokens_for_retry)
-        self.max_tokens = self.tokens_for_retry * max_retries
-        self.tokens = self.max_tokens
+        self.retry_cost = retry_cost
+        self.success_tokens = int(retry_budget_ratio * self.retry_cost)
+        self.max_budget_tokens = self.retry_cost * max_retry_budget
+        self.current_tokens = self.max_budget_tokens
 
-    def add_tokens(self) -> None:
-        self.tokens = min(self.max_tokens, self.tokens + self.tokens_to_add_for_success)
+    def add_tokens_on_success(self) -> None:
+        self.current_tokens = min(
+            self.max_budget_tokens, self.current_tokens + self.success_tokens
+        )
 
-    def allow_retry(self) -> bool:
-        if self.tokens < self.tokens_for_retry:
+    def check_retry_attempt(self) -> bool:
+        if self.current_tokens < self.retry_cost:
             return False
-        self.tokens -= self.tokens_for_retry
+        self.current_tokens -= self.retry_cost
         return True
