@@ -9,9 +9,9 @@ def orm_to_schema(phones: list[Phone]) -> list[PhoneDetailAPIRequest]:
     return [PhoneDetailAPIRequest.model_validate(phone) for phone in phones]
 
 
-def orm_to_dict(user: User) -> dict[str, str]:
+def orm_to_dict(user: User) -> PhoneNumbers:
     phone_numbers = [phone.phone_number for phone in user.phone_numbers]
-    return PhoneNumbers(phone_numbers=phone_numbers).model_dump()
+    return PhoneNumbers(phone_numbers=phone_numbers)
 
 
 def schema_to_dict(payload: UserCreateRequest, user_uuid: UUID) -> list[dict[str, Any]]:

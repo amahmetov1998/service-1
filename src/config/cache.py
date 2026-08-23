@@ -1,3 +1,4 @@
+import functools
 import json
 import logging
 
@@ -5,6 +6,20 @@ from redis import RedisError
 from redis.asyncio import Redis
 
 log = logging.getLogger(__name__)
+
+
+def handle_cache_errors(request_func):
+    @functools.wraps(request_func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await request_func(*args, **kwargs)
+        except RedisError as e:
+            log.warning(
+                "Redis operation failed. Error type=%s, error=%s", type(e).__name__, e
+            )
+            return None
+
+    return wrapper
 
 
 class RedisCache:
@@ -23,27 +38,22 @@ class RedisCache:
         )
         self.cache_ttl_seconds = cache_ttl_seconds
 
+    @handle_cache_errors
     async def set(
         self,
         key: str,
         value: dict,
     ) -> None:
         payload = json.dumps(value)
-        try:
-            await self.redis.set(key, payload, ex=self.cache_ttl_seconds)
-        except RedisError as e:
-            log.warning("Redis SET failed for key=%s: %s", key, e)
+        await self.redis.set(key, payload, ex=self.cache_ttl_seconds)
 
+    @handle_cache_errors
     async def get(self, key: str) -> dict | None:
-        try:
-            value = await self.redis.get(key)
-        except RedisError as e:
-            log.warning("Redis GET failed for key=%s: %s", key, e)
-            return None
-        if value is None:
-            return None
-        return json.loads(value)
+        value = await self.redis.get(key)
+        result = json.loads(value) if value else None
+        return result
 
+    @handle_cache_errors
     async def delete(self, key: str) -> None:
         await self.redis.delete(key)
 

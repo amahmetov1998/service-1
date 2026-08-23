@@ -3,7 +3,6 @@ from .enums import (
     OperatorType,
     PhoneType,
     RegionType,
-    UserStatus,
     PhoneSyncStatus,
 )
 from .phone import Phone
@@ -16,6 +15,5 @@ __all__ = [
     "OperatorType",
     "PhoneType",
     "RegionType",
-    "UserStatus",
     "PhoneSyncStatus",
 ]

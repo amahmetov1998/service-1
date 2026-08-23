@@ -1,3 +1,4 @@
+import functools
 import logging
 from http import HTTPStatus
 from typing import Callable, Awaitable, Any
@@ -14,22 +15,18 @@ from tenacity import (
 
 from src.config import RetryBudgetStrategy, settings
 from src.exceptions import (
-    ERRORS,
-    PHONE_DATA_EXISTS,
-    RETRIES_EXCEEDED,
-    PHONE_DATA_NOT_FOUND,
-    SERVICE_UNAVAILABLE,
     RetriesLimitError,
     NotFoundError,
     AlreadyExistsError,
     ServiceUnavailableError,
 )
-from src.schemas import PhoneDetailAPIRequest
+from src.schemas import PhoneDetailAPIRequest, PhoneNumbers
 
 log = logging.getLogger(__name__)
 
 
 def handle_transport_errors(request_func):
+    @functools.wraps(request_func)
     async def wrapper(*args, **kwargs):
         try:
             return await request_func(*args, **kwargs)
@@ -41,7 +38,7 @@ def handle_transport_errors(request_func):
             log.warning(
                 "Service not available. Error type=%s, error=%s", type(e).__name__, e
             )
-            raise ServiceUnavailableError(SERVICE_UNAVAILABLE)
+            raise ServiceUnavailableError("Phone service unavailable")
 
     return wrapper
 
@@ -66,44 +63,28 @@ class ServicePhoneClient:
         response = await self._make_request(
             request_method=self.client.post, json=service_payload
         )
-        self._raise_for_error(response)
         if response.status_code == HTTPStatus.CONFLICT:
-            raise AlreadyExistsError(PHONE_DATA_EXISTS)
+            raise AlreadyExistsError("Phone data already exists")
 
         self.retry_strategy.add_tokens_on_success()
 
     @handle_transport_errors
     async def get_phones(
         self,
-        params: dict[str, str],
+        params: PhoneNumbers,
     ) -> list[dict[str, str]]:
+        response = await self._make_request(self.client.get, params=params.model_dump())
 
-        response = await self._make_request(self.client.get, params=params)
-
-        self._raise_for_error(response)
         if response.status_code == HTTPStatus.NOT_FOUND:
             log.warning(
-                "Service rejected the request with status code: %s, reason: %s",
+                "Service rejected the request with status code: %s. Phone data not found",
                 response.status_code,
-                PHONE_DATA_NOT_FOUND,
             )
-            raise NotFoundError(PHONE_DATA_NOT_FOUND)
+            raise NotFoundError("Phone data not found")
 
         self.retry_strategy.add_tokens_on_success()
 
         return response.json()
-
-    @staticmethod
-    def _raise_for_error(response: httpx.Response) -> None:
-        error = ERRORS.get(response.status_code)
-        if error:
-            exc, msg = error
-            log.warning(
-                "Service rejected the request with status code: %s, reason: %s",
-                response.status_code,
-                msg,
-            )
-            raise exc(msg)
 
     async def _make_request(
         self,
@@ -121,7 +102,6 @@ class ServicePhoneClient:
         ):
             with attempt:
                 response = await request_method(self.url, **kwargs)
-                attempt.retry_state.set_result(response)
 
             if attempt.retry_state.outcome.failed:
                 raise attempt.retry_state.outcome.exception()
@@ -137,4 +117,4 @@ class ServicePhoneClient:
         )
         if not self.retry_strategy.check_retry_attempt():
             log.warning("Retry limit exceeded: retries are no longer allowed")
-            raise RetriesLimitError(RETRIES_EXCEEDED)
+            raise RetriesLimitError("Retry limit exceeded")

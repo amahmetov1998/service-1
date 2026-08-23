@@ -1,12 +1,6 @@
 import enum
 
 
-class UserStatus(enum.StrEnum):
-    ACTIVE = "active"
-    BLOCKED = "blocked"
-    DELETED = "deleted"
-
-
 class PhoneSyncStatus(enum.StrEnum):
     PENDING = "pending"
     DONE = "done"

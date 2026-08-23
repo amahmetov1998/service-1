@@ -63,6 +63,14 @@ class DatabaseConfig(BaseModel):
     pool_pre_ping: bool = True
 
 
+class WorkerConfig(BaseModel):
+    users_per_worker: int
+    max_concurrent_tasks: int
+    max_retry_count_per_user: int
+    max_backoff_minutes: int
+    poll_interval: int
+
+
 class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
@@ -79,6 +87,7 @@ class Settings(BaseSettings):
     client: HTTPClientConfig
     redis: RedisConfig
     db: DatabaseConfig
+    worker: WorkerConfig
 
 
 settings = Settings()

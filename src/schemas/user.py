@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from src.models import UserStatus, PhoneSyncStatus
+from src.models import PhoneSyncStatus
 from .base import BaseResponse
 from .phone import PhoneCreateRequest, PhoneResponse
 
@@ -58,7 +58,6 @@ class UserUpdateResponse(BaseResponse):
     first_name: str
     last_name: str
     email: EmailStr
-    status: UserStatus
     created_at: datetime
 
 
@@ -73,4 +72,6 @@ class UserPhonesResponse(BaseResponse):
 
 class UserSyncResult(BaseResponse):
     uuid: UUID
-    phone_sync_status: PhoneSyncStatus
+    next_retry_at: datetime | None
+    phone_sync_status: PhoneSyncStatus | None
+    retry_count: int

@@ -14,10 +14,7 @@ from src.models import Base
 config = context.config
 
 database_url = os.environ["DATABASE_URL"]
-config.set_main_option(
-    "sqlalchemy.url",
-    database_url,
-)
+config.set_main_option("sqlalchemy.url", database_url)
 
 # config.set_main_option("sqlalchemy.url", str(settings.db.url))
 # Interpret the config file for Python logging.

@@ -1,3 +1,6 @@
+from math import ceil
+
+
 class RetryBudgetStrategy:
     def __init__(
         self,
@@ -6,7 +9,7 @@ class RetryBudgetStrategy:
         max_retry_budget: int,
     ) -> None:
         self.retry_cost = retry_cost
-        self.success_tokens = int(retry_budget_ratio * self.retry_cost)
+        self.success_tokens = ceil(retry_budget_ratio * self.retry_cost)
         self.max_budget_tokens = self.retry_cost * max_retry_budget
         self.current_tokens = self.max_budget_tokens
 

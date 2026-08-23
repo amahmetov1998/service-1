@@ -10,6 +10,7 @@ from src.config import (
     settings,
     create_engine,
     configure_logging,
+    RetryBackoffStrategy,
 )
 from src.dependencies import get_uow
 from src.worker.main_worker import Worker
@@ -21,14 +22,18 @@ async def run_worker():
         base_url=settings.client.base_url,
         timeout=settings.client.timeout,
     )
-    retry_strategy = RetryBudgetStrategy(
+    retry_budget_strategy = RetryBudgetStrategy(
         retry_cost=settings.retry.retry_cost,
         retry_budget_ratio=settings.retry.retry_budget_ratio,
         max_retry_budget=settings.retry.max_retry_budget,
     )
+    retry_backoff_strategy = RetryBackoffStrategy(
+        max_retry_count_per_user=settings.worker.max_retry_count_per_user,
+        max_backoff=settings.worker.max_backoff_minutes,
+    )
     service_phone_client = ServicePhoneClient(
         client=client,
-        retry_strategy=retry_strategy,
+        retry_strategy=retry_budget_strategy,
     )
     engine = create_engine(settings.db.url)
     session_factory = create_session_factory(engine)
@@ -36,6 +41,9 @@ async def run_worker():
     worker = Worker(
         service_phone_client=service_phone_client,
         uow_factory=uow_factory,
+        users_per_worker=settings.worker.users_per_worker,
+        max_concurrent_tasks=settings.worker.max_concurrent_tasks,
+        retry_backoff_strategy=retry_backoff_strategy,
     )
 
     stop_event = asyncio.Event()
@@ -52,7 +60,7 @@ async def run_worker():
             try:
                 await asyncio.wait_for(
                     stop_event.wait(),
-                    timeout=10,
+                    timeout=settings.worker.poll_interval,
                 )
             except asyncio.TimeoutError:
                 pass

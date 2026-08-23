@@ -40,9 +40,7 @@ def dict_to_schema(
     )
 
 
-def orm_to_schema(
-    user: User, phones: list[Phone], status: PhoneSyncStatus | None
-) -> UserPhonesResponse:
+def orm_to_schema(user: User, phones: list[Phone]) -> UserPhonesResponse:
     phones = [
         PhoneResponse(
             phone_number=phone.phone_number,
@@ -60,19 +58,19 @@ def orm_to_schema(
         last_name=user.last_name,
         email=user.email,
         phone_numbers=phones,
-        phone_sync_status=status,
+        phone_sync_status=user.phone_sync_status,
     )
 
 
-def schema_to_dict(sync_results: list[UserSyncResult]) -> list[dict[str, str]]:
-    return [user.model_dump() for user in sync_results]
+def schema_to_dict(results: list[UserSyncResult]) -> list[dict[str, str]]:
+    return [user.model_dump() for user in results]
 
 
-def orm_to_dict(users: list[User]) -> list[dict[str, Any]]:
+def orm_to_dict(users: list[User], status: PhoneSyncStatus) -> list[dict[str, Any]]:
     return [
         {
             "uuid": user.uuid,
-            "phone_sync_status": PhoneSyncStatus.PROCESSING,
+            "phone_sync_status": status,
         }
         for user in users
     ]
