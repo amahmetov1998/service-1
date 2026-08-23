@@ -95,8 +95,8 @@ class UserService:
     async def _delete_user(self, user_uuid: UUID) -> None:
         async with self.uow_factory() as uow:
             user = await uow.users.soft_delete_user(user_uuid=user_uuid)
-        if not user:
-            raise NotFoundError("User not found")
+
+        self._check_user_exists(user=user, user_uuid=user_uuid)
 
     async def update_user(
         self,
@@ -110,10 +110,12 @@ class UserService:
                 if user_exists:
                     log.warning("User already exists with email=%s", payload.email)
                     raise AlreadyExistsError("User already exists")
+
             values = payload.model_dump(exclude_unset=True)
             user = await uow.users.update_user(user_uuid=user_uuid, values=values)
-        if not user:
-            raise NotFoundError("User not found")
+
+        self._check_user_exists(user=user, user_uuid=user_uuid)
+
         key = self.__get_user_cache_key(user_uuid=user_uuid)
         await self.cache.delete(key=key)
         return user
@@ -141,9 +143,7 @@ class UserService:
     async def _get_user(self, user_uuid: UUID) -> User:
         async with self.uow_factory() as uow:
             user = await uow.users.get_user_with_phones(user_uuid=user_uuid)
-            if not user:
-                log.warning("User does not exist with uuid=%s", user_uuid)
-                raise NotFoundError("User not found")
+            self._check_user_exists(user=user, user_uuid=user_uuid)
             return user
 
     async def _update_user_status(
@@ -153,9 +153,7 @@ class UserService:
             user = await uow.users.update_user_phone_status(
                 user_uuid=user_uuid, status=status
             )
-            if not user:
-                log.warning("User does not exist with uuid=%s", user_uuid)
-                raise NotFoundError("User not found")
+            self._check_user_exists(user=user, user_uuid=user_uuid)
         return user
 
     async def _fetch_phones_detail(self, user: User) -> UserPhonesResponse | None:
@@ -200,3 +198,9 @@ class UserService:
     @staticmethod
     def __get_user_cache_key(user_uuid: UUID) -> str:
         return f"user:{user_uuid}"
+
+    @staticmethod
+    def _check_user_exists(user: User | None, user_uuid: UUID) -> None:
+        if not user:
+            log.warning("User does not exist with uuid=%s", user_uuid)
+            raise NotFoundError("User not found")
