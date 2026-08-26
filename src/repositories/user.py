@@ -1,7 +1,8 @@
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, update, func, or_
+from sqlalchemy import select, update, func, or_, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Result
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,8 +33,10 @@ class UserRepository:
 
         return user
 
-    async def get_user_by_email(self, email: str) -> User | None:
-        stmt = select(User).where(User.email == email)
+    async def get_user_by_email(
+        self, email: str, exclude_user_uuid: UUID
+    ) -> User | None:
+        stmt = select(User).where(User.email == email, User.uuid != exclude_user_uuid)
         result: Result = await self.session.execute(stmt)
         user: User | None = result.scalar_one_or_none()
         return user
@@ -88,6 +91,23 @@ class UserRepository:
         result: Result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_stuck_users(
+        self, limit: int, processing_timeout: timedelta
+    ) -> list[User]:
+        stmt = (
+            select(User)
+            .where(
+                User.phone_sync_status == PhoneSyncStatus.PROCESSING,
+                User.is_deleted.is_(False),
+                User.processing_started_at <= func.now() - processing_timeout,
+            )
+            .options(selectinload(User.phone_numbers))
+            .with_for_update(skip_locked=True)
+            .limit(limit)
+        )
+        result: Result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def update_user_phone_status(
         self, user_uuid: UUID, status: PhoneSyncStatus
     ) -> None | User:
@@ -112,15 +132,28 @@ class UserRepository:
         )
 
     async def update_users_status(self, users: list[dict[str, str]]) -> None:
-        await self.session.execute(
-            update(User),
-            users,
-        )
+        for user in users:
+            stmt = (
+                update(User)
+                .where(
+                    User.uuid == user["uuid"],
+                    User.attempt_id == user["attempt_id"],
+                )
+                .values(
+                    phone_sync_status=user["phone_sync_status"],
+                    retry_count=user["retry_count"],
+                    next_retry_at=user["next_retry_at"],
+                    processing_started_at=None,
+                )
+            )
+            await self.session.execute(stmt)
 
-    async def soft_delete_users(self, user_uuids: list[UUID]) -> None:
+    async def soft_delete_users(
+        self, deleted_user_data: list[tuple[UUID, UUID]]
+    ) -> None:
         stmt = (
             update(User)
-            .where(User.uuid.in_(user_uuids))
+            .where(tuple_(User.uuid, User.attempt_id).in_(deleted_user_data))
             .values(is_deleted=True, phone_sync_status=None)
         )
         await self.session.execute(stmt)

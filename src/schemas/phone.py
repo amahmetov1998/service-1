@@ -1,6 +1,8 @@
 from pydantic import BaseModel, field_validator, Field, ConfigDict
 
+from src.exceptions.invalid_format import InvalidFormatError
 from src.models import PhoneType, OperatorType, RegionType
+from src.schemas import InvalidFormatDetails
 
 
 class PhoneCreateRequest(BaseModel):
@@ -14,10 +16,13 @@ class PhoneCreateRequest(BaseModel):
 
     @field_validator("phone_number")
     @classmethod
-    def validate_phone_number(cls, v: str) -> str:
-        if not all(char.isdigit() or char in "+() -" for char in v):
-            raise ValueError("Phone number must contain only digits")
-        return v
+    def validate_phone_number(cls, value: str) -> str:
+        if not all(char.isdigit() or char in "+() -" for char in value):
+            raise InvalidFormatError(
+                "Phone number contains invalid characters",
+                details=InvalidFormatDetails(detail=value),
+            )
+        return value
 
 
 class PhoneResponse(PhoneCreateRequest):

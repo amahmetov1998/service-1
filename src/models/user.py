@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
+from uuid import UUID, uuid4
 
 from sqlalchemy import String, Integer, DateTime
 from sqlalchemy.orm import (
@@ -29,3 +30,10 @@ class User(Base):
     phone_sync_status: Mapped[PhoneSyncStatus | None]
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    operation_id: Mapped[UUID] = mapped_column(default=uuid4)
+
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    attempt_id: Mapped[UUID] = mapped_column(default=uuid4)

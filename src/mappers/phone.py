@@ -5,11 +5,11 @@ from src.models import Phone, User
 from src.schemas import PhoneDetailAPIRequest, PhoneNumbers, UserCreateRequest
 
 
-def orm_to_schema(phones: list[Phone]) -> list[PhoneDetailAPIRequest]:
+def orm_to_schemas(phones: list[Phone]) -> list[PhoneDetailAPIRequest]:
     return [PhoneDetailAPIRequest.model_validate(phone) for phone in phones]
 
 
-def orm_to_dict(user: User) -> PhoneNumbers:
+def orm_to_schema(user: User) -> PhoneNumbers:
     phone_numbers = [phone.phone_number for phone in user.phone_numbers]
     return PhoneNumbers(phone_numbers=phone_numbers)
 

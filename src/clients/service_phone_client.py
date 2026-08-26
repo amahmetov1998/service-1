@@ -20,7 +20,14 @@ from src.exceptions import (
     AlreadyExistsError,
     ServiceUnavailableError,
 )
-from src.schemas import PhoneDetailAPIRequest, PhoneNumbers
+from src.schemas import (
+    PhoneDetailAPIRequest,
+    PhoneNumbers,
+    PhoneDetailAPIResponse,
+    AlreadyExistsDetails,
+    NotFoundDetails,
+    IdempotencyHeaders,
+)
 
 log = logging.getLogger(__name__)
 
@@ -57,14 +64,20 @@ class ServicePhoneClient:
     @handle_transport_errors
     async def send_phones(
         self,
+        headers: IdempotencyHeaders,
         payload: list[PhoneDetailAPIRequest],
     ) -> None:
         service_payload = [phone.model_dump() for phone in payload]
         response = await self._make_request(
-            request_method=self.client.post, json=service_payload
+            self.client.post,
+            headers=headers.model_dump(by_alias=True),
+            json=service_payload,
         )
         if response.status_code == HTTPStatus.CONFLICT:
-            raise AlreadyExistsError("Phone data already exists")
+            raise AlreadyExistsError(
+                "Phone data already exists",
+                details=AlreadyExistsDetails(**response.json()),
+            )
 
         self.retry_strategy.add_tokens_on_success()
 
@@ -72,7 +85,7 @@ class ServicePhoneClient:
     async def get_phones(
         self,
         params: PhoneNumbers,
-    ) -> list[dict[str, str]]:
+    ) -> list[PhoneDetailAPIResponse]:
         response = await self._make_request(self.client.get, params=params.model_dump())
 
         if response.status_code == HTTPStatus.NOT_FOUND:
@@ -80,11 +93,13 @@ class ServicePhoneClient:
                 "Service rejected the request with status code: %s. Phone data not found",
                 response.status_code,
             )
-            raise NotFoundError("Phone data not found")
+            raise NotFoundError(
+                "Phone data not found", details=NotFoundDetails(**response.json())
+            )
 
         self.retry_strategy.add_tokens_on_success()
 
-        return response.json()
+        return [PhoneDetailAPIResponse.model_validate(item) for item in response.json()]
 
     async def _make_request(
         self,
@@ -103,10 +118,8 @@ class ServicePhoneClient:
             with attempt:
                 response = await request_method(self.url, **kwargs)
 
-            if attempt.retry_state.outcome.failed:
-                raise attempt.retry_state.outcome.exception()
-
-            attempt.retry_state.set_result(response)
+            if not attempt.retry_state.outcome.failed:
+                attempt.retry_state.set_result(response)
 
         return response
 

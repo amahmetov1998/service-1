@@ -10,8 +10,19 @@ __all__ = [
     "HealthCheck",
     "PhoneNumbers",
     "UserSyncResult",
+    "AlreadyExistsDetails",
+    "NotFoundDetails",
+    "ErrorResponse",
+    "InvalidFormatDetails",
+    "IdempotencyHeaders",
 ]
 
+from .errors import (
+    AlreadyExistsDetails,
+    NotFoundDetails,
+    ErrorResponse,
+    InvalidFormatDetails,
+)
 from .healthcheck import HealthCheck
 from .phone import (
     PhoneResponse,
@@ -26,4 +37,5 @@ from .user import (
     UserUpdateResponse,
     UserUpdateRequest,
     UserSyncResult,
+    IdempotencyHeaders,
 )

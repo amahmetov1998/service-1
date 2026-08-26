@@ -41,9 +41,11 @@ async def run_worker():
     worker = Worker(
         service_phone_client=service_phone_client,
         uow_factory=uow_factory,
-        users_per_worker=settings.worker.users_per_worker,
+        pending_users_per_worker=settings.worker.pending_users_per_worker,
+        stuck_users_per_worker=settings.worker.stuck_users_per_worker,
         max_concurrent_tasks=settings.worker.max_concurrent_tasks,
         retry_backoff_strategy=retry_backoff_strategy,
+        processing_timeout_seconds=settings.worker.processing_timeout_seconds,
     )
 
     stop_event = asyncio.Event()

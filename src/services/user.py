@@ -16,6 +16,8 @@ from src.schemas import (
     UserUpdateRequest,
     UserPhonesResponse,
     PhoneCreateRequest,
+    AlreadyExistsDetails,
+    IdempotencyHeaders,
 )
 
 log = logging.getLogger(__name__)
@@ -37,10 +39,10 @@ class UserService:
         payload: UserCreateRequest,
     ) -> UserPhonesResponse:
         user, phones = await self._create_user_with_phones(payload=payload)
-        service_payload = phone_mapper.orm_to_schema(phones=phones)
-
+        service_payload = phone_mapper.orm_to_schemas(phones=phones)
+        headers = IdempotencyHeaders(idempotency_key=str(user.operation_id))
         try:
-            await self.client.send_phones(payload=service_payload)
+            await self.client.send_phones(headers=headers, payload=service_payload)
             status = PhoneSyncStatus.DONE
         except AlreadyExistsError as e:
             log.warning(
@@ -56,11 +58,6 @@ class UserService:
             status = PhoneSyncStatus.PENDING
         updated_user = await self._update_user_status(
             user_uuid=user.uuid, status=status
-        )
-
-        log.info(
-            "Phone data synchronized successfully for user: uuid=%s",
-            updated_user.uuid,
         )
 
         return user_mapper.orm_to_schema(updated_user, phones)
@@ -106,7 +103,9 @@ class UserService:
         async with self.uow_factory() as uow:
             if payload.email:
                 await uow.users.lock_email(email=payload.email)
-                user_exists = await uow.users.get_user_by_email(email=payload.email)
+                user_exists = await uow.users.get_user_by_email(
+                    email=payload.email, exclude_user_uuid=user_uuid
+                )
                 if user_exists:
                     log.warning("User already exists with email=%s", payload.email)
                     raise AlreadyExistsError("User already exists")
@@ -157,7 +156,7 @@ class UserService:
         return user
 
     async def _fetch_phones_detail(self, user: User) -> UserPhonesResponse | None:
-        params = phone_mapper.orm_to_dict(user=user)
+        params = phone_mapper.orm_to_schema(user=user)
 
         try:
             phones = await self.client.get_phones(params=params)
@@ -169,7 +168,7 @@ class UserService:
 
         except ServiceUnavailableError:
             return None
-        return user_mapper.dict_to_schema(phone_details=phones, user=user)
+        return user_mapper.response_to_schema(phone_details=phones, user=user)
 
     async def _get_cached_user(self, key: str) -> UserPhonesResponse | None:
         cached = await self.cache.get(key)
@@ -192,7 +191,8 @@ class UserService:
         if existing:
             log.warning("Phone(s) already exists with phone number(s)=%s", existing)
             raise AlreadyExistsError(
-                message="Phone data already exists", details={"phone_numbers": existing}
+                message="Phone data already exists",
+                details=AlreadyExistsDetails(detail=existing),
             )
 
     @staticmethod

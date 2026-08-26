@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 
 from src.models import PhoneSyncStatus
 from .base import BaseResponse
@@ -72,6 +72,13 @@ class UserPhonesResponse(BaseResponse):
 
 class UserSyncResult(BaseResponse):
     uuid: UUID
+    attempt_id: UUID
     next_retry_at: datetime | None
     phone_sync_status: PhoneSyncStatus | None
     retry_count: int
+
+
+class IdempotencyHeaders(BaseModel):
+    model_config = ConfigDict(validate_by_name=True)
+
+    idempotency_key: str = Field(alias="Idempotency-Key")

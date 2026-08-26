@@ -64,11 +64,13 @@ class DatabaseConfig(BaseModel):
 
 
 class WorkerConfig(BaseModel):
-    users_per_worker: int
+    pending_users_per_worker: int
+    stuck_users_per_worker: int
     max_concurrent_tasks: int
     max_retry_count_per_user: int
     max_backoff_minutes: int
     poll_interval: int
+    processing_timeout_seconds: int
 
 
 class Settings(BaseSettings):

@@ -1,3 +1,5 @@
+import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from src.models import User, Phone, PhoneSyncStatus
@@ -9,12 +11,9 @@ from src.schemas import (
 )
 
 
-def dict_to_schema(
-    phone_details: list[dict[str, str]], user: User
+def response_to_schema(
+    phone_details: list[PhoneDetailAPIResponse], user: User
 ) -> UserPhonesResponse:
-    phone_details = [
-        PhoneDetailAPIResponse.model_validate(item) for item in phone_details
-    ]
     phone_details_map = {item.phone_number: item for item in phone_details}
     phones = []
     for phone in user.phone_numbers:
@@ -71,6 +70,10 @@ def orm_to_dict(users: list[User], status: PhoneSyncStatus) -> list[dict[str, An
         {
             "uuid": user.uuid,
             "phone_sync_status": status,
+            "retry_count": user.retry_count,
+            "next_retry_at": user.next_retry_at,
+            "processing_started_at": datetime.now(timezone.utc),
+            "attempt_id": uuid.uuid4(),
         }
         for user in users
     ]
