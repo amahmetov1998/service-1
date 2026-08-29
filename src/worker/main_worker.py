@@ -5,7 +5,11 @@ from typing import Callable
 
 from src.clients import ServicePhoneClient
 from src.config import ApplicationUnitOfWork, RetryBackoffStrategy
-from src.exceptions import ServiceUnavailableError, AlreadyExistsError
+from src.exceptions import (
+    ServiceUnavailableError,
+    AlreadyExistsError,
+    IdempotencyConflictError,
+)
 from src.mappers import phone as phone_mapper, user as user_mapper
 from src.models import User, PhoneSyncStatus
 from src.schemas import UserSyncResult, IdempotencyHeaders
@@ -58,7 +62,7 @@ class Worker:
 
             except AlreadyExistsError as e:
                 log.warning(
-                    "Phone sync failed. user uuid=%s, error_type=%s, error=%s",
+                    "Phone data synchronized failed. user uuid=%s, error_type=%s, error=%s",
                     user.uuid,
                     type(e).__name__,
                     e,
@@ -66,7 +70,15 @@ class Worker:
                 status = None
                 retry_count = 0
                 next_retry_at = None
-
+            except IdempotencyConflictError as e:
+                log.warning(
+                    "Phone data synchronized failed. Error type=%s, error=%s",
+                    type(e).__name__,
+                    e,
+                )
+                status = PhoneSyncStatus.FAILED
+                retry_count = user.retry_count
+                next_retry_at = None
             except ServiceUnavailableError:
                 if self.retry_backoff_strategy.can_retry(retry_count=user.retry_count):
                     backoff = self.retry_backoff_strategy.get_backoff(

@@ -1,5 +1,5 @@
 from .already_exists import AlreadyExistsError
-
+from .idempotency_conflict import IdempotencyConflictError
 from .invalid_format import InvalidFormatError
 from .not_found import NotFoundError
 from .retries_limit import RetriesLimitError
@@ -11,4 +11,5 @@ __all__ = [
     "AlreadyExistsError",
     "ServiceUnavailableError",
     "InvalidFormatError",
+    "IdempotencyConflictError",
 ]

@@ -1,3 +1,4 @@
+from .error_codes import ErrorCode
 from .healthcheck import HealthStatus
 from .phone import (
     OperatorType,
@@ -13,4 +14,5 @@ __all__ = [
     "RegionType",
     "PhoneSyncStatus",
     "HealthStatus",
+    "ErrorCode",
 ]

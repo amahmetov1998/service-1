@@ -19,12 +19,15 @@ from src.exceptions import (
     NotFoundError,
     AlreadyExistsError,
     ServiceUnavailableError,
+    IdempotencyConflictError,
 )
+from src.models import ErrorCode
 from src.schemas import (
     PhoneDetailAPIRequest,
     PhoneNumbers,
     PhoneDetailAPIResponse,
     AlreadyExistsDetails,
+    IdempotencyConflictDetails,
     NotFoundDetails,
     IdempotencyHeaders,
 )
@@ -74,10 +77,18 @@ class ServicePhoneClient:
             json=service_payload,
         )
         if response.status_code == HTTPStatus.CONFLICT:
-            raise AlreadyExistsError(
-                "Phone data already exists",
-                details=AlreadyExistsDetails(**response.json()),
-            )
+            data = response.json()
+            error_code = data.get("error_code")
+            if error_code == ErrorCode.PHONE_ALREADY_EXISTS:
+                raise AlreadyExistsError(
+                    "Phone data already exists",
+                    details=AlreadyExistsDetails(**response.json()),
+                )
+            if error_code == ErrorCode.IDEMPOTENCY_KEY_REUSED:
+                raise IdempotencyConflictError(
+                    "Operation id already exists with different payload",
+                    details=IdempotencyConflictDetails(**response.json()),
+                )
 
         self.retry_strategy.add_tokens_on_success()
 

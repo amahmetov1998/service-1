@@ -5,6 +5,7 @@ from .enums import (
     PhoneType,
     RegionType,
     PhoneSyncStatus,
+    ErrorCode,
 )
 from .phone import Phone
 from .user import User
@@ -18,4 +19,5 @@ __all__ = [
     "PhoneType",
     "RegionType",
     "PhoneSyncStatus",
+    "ErrorCode",
 ]

@@ -15,6 +15,10 @@ class InvalidFormatDetails(BaseModel):
     detail: str
 
 
+class IdempotencyConflictDetails(BaseModel):
+    detail: str
+
+
 class ErrorResponse(BaseModel):
     message: str
     details: Any | None = None

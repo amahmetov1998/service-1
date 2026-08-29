@@ -9,6 +9,7 @@ from src.exceptions import (
     NotFoundError,
     AlreadyExistsError,
     InvalidFormatError,
+    IdempotencyConflictError,
 )
 from src.schemas import ErrorResponse
 
@@ -58,6 +59,15 @@ def register_errors_handlers(app):
 
     @app.exception_handler(AlreadyExistsError)
     def already_exists_handler(request: Request, exc: AlreadyExistsError):
+
+        return _error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            message=str(exc),
+            details=exc.details,
+        )
+
+    @app.exception_handler(IdempotencyConflictError)
+    def idempotency_conflict_handler(request: Request, exc: IdempotencyConflictError):
 
         return _error_response(
             status_code=status.HTTP_409_CONFLICT,

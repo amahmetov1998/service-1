@@ -15,6 +15,7 @@ __all__ = [
     "ErrorResponse",
     "InvalidFormatDetails",
     "IdempotencyHeaders",
+    "IdempotencyConflictDetails",
 ]
 
 from .errors import (
@@ -22,6 +23,7 @@ from .errors import (
     NotFoundDetails,
     ErrorResponse,
     InvalidFormatDetails,
+    IdempotencyConflictDetails,
 )
 from .healthcheck import HealthCheck
 from .phone import (

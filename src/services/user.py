@@ -4,6 +4,7 @@ from uuid import UUID
 
 from src.clients import ServicePhoneClient
 from src.config import RedisCache, ApplicationUnitOfWork
+from src.exceptions import IdempotencyConflictError
 from src.exceptions import (
     NotFoundError,
     AlreadyExistsError,
@@ -51,6 +52,14 @@ class UserService:
                 e,
             )
             await self._delete_user(user_uuid=user.uuid)
+            raise
+
+        except IdempotencyConflictError as e:
+            log.warning(
+                "Phone data synchronized failed. Error type=%s, error=%s",
+                type(e).__name__,
+                e,
+            )
             raise
 
         except ServiceUnavailableError:
