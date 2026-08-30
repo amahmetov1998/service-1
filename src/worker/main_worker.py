@@ -95,7 +95,7 @@ class Worker:
 
             except Exception as e:
                 log.exception(
-                    "Unexpected error while syncing user uuid=%s, error_type=%s, error=%s",
+                    "Unexpected client error while syncing user uuid=%s, error_type=%s, error=%s",
                     user.uuid,
                     type(e).__name__,
                     e,
@@ -144,5 +144,4 @@ class Worker:
                 users=processed, status=PhoneSyncStatus.PROCESSING
             )
             await uow.users.update_users_status(users=processed_users)
-
         return processed

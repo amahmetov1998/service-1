@@ -82,12 +82,12 @@ class ServicePhoneClient:
             if error_code == ErrorCode.PHONE_ALREADY_EXISTS:
                 raise AlreadyExistsError(
                     "Phone data already exists",
-                    details=AlreadyExistsDetails(**response.json()),
+                    details=AlreadyExistsDetails(**data),
                 )
             if error_code == ErrorCode.IDEMPOTENCY_KEY_REUSED:
                 raise IdempotencyConflictError(
                     "Operation id already exists with different payload",
-                    details=IdempotencyConflictDetails(**response.json()),
+                    details=IdempotencyConflictDetails(**data),
                 )
 
         self.retry_strategy.add_tokens_on_success()

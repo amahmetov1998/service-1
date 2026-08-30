@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import signal
 
 import httpx
@@ -14,6 +15,8 @@ from src.config import (
 )
 from src.dependencies import get_uow
 from src.worker.main_worker import Worker
+
+log = logging.getLogger(__name__)
 
 
 async def run_worker():
@@ -57,8 +60,14 @@ async def run_worker():
 
     try:
         while not stop_event.is_set():
-            await worker.run()
-
+            try:
+                await worker.run()
+            except Exception as e:
+                log.exception(
+                    "Unexpected error in worker. Error type=%s, error=%s",
+                    type(e).__name__,
+                    e,
+                )
             try:
                 await asyncio.wait_for(
                     stop_event.wait(),
