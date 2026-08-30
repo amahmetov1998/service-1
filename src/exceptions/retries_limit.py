@@ -1,0 +1,2 @@
+class RetriesLimitError(Exception):
+    pass
