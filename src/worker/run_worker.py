@@ -31,7 +31,7 @@ async def run_worker():
         max_retry_budget=settings.retry.max_retry_budget,
     )
     retry_backoff_strategy = RetryBackoffStrategy(
-        max_retry_count_per_user=settings.worker.max_retry_count_per_user,
+        max_retry_count_per_entity=settings.worker.max_retry_count_per_user,
         max_backoff=settings.worker.max_backoff_minutes,
     )
     service_phone_client = ServicePhoneClient(

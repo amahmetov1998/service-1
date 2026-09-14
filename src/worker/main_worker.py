@@ -128,7 +128,7 @@ class Worker:
             if deleted_user_data:
                 await uow.users.soft_delete_users(deleted_user_data=deleted_user_data)
             if processed_user_data:
-                await uow.users.update_users_status(users=users)
+                await uow.users.update_processed_users_status(users=users)
 
     async def _get_users(self) -> list[User]:
         async with self.uow_factory() as uow:

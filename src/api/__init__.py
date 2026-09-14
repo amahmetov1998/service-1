@@ -1,1 +1,1 @@
-from .v1 import healthcheck_router, user_phones_router
+from .v1 import healthcheck_router, user_phones_router, notification_router

@@ -1,6 +1,11 @@
 from typing import Self
 
-from src.repositories import UserRepository, PhoneRepository
+from src.repositories import (
+    UserRepository,
+    PhoneRepository,
+    NotificationRepository,
+    OutboxEventRepository,
+)
 
 
 class UnitOfWork:
@@ -26,4 +31,6 @@ class ApplicationUnitOfWork(UnitOfWork):
         await super().__aenter__()
         self.users = UserRepository(self.session)
         self.phones = PhoneRepository(self.session)
+        self.notifications = NotificationRepository(self.session)
+        self.events = OutboxEventRepository(self.session)
         return self
