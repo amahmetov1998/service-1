@@ -8,9 +8,10 @@ from .enums import (
     ErrorCode,
     NotificationType,
     EventType,
+    OutboxStatus,
 )
 from .notification import Notification
-from .outbox_event import OutboxEvent, TaskStatus
+from .outbox_event import OutboxEvent
 from .phone import Phone
 from .user import User
 
@@ -28,5 +29,5 @@ __all__ = [
     "Notification",
     "NotificationType",
     "EventType",
-    "TaskStatus",
+    "OutboxStatus",
 ]

@@ -18,8 +18,8 @@ __all__ = [
     "IdempotencyConflictDetails",
     "NotificationCreateRequest",
     "NotificationCreateResponse",
-    "OutboxEventSchema",
     "SentNotificationResult",
+    "OutboxEventSchema",
 ]
 
 from .errors import (
@@ -33,8 +33,9 @@ from .healthcheck import HealthCheck
 from .notification import (
     NotificationCreateRequest,
     NotificationCreateResponse,
+    SentNotificationResult,
 )
-from .outbox_event import OutboxEventSchema, SentNotificationResult
+from .outbox_event import OutboxEventSchema
 from .phone import (
     PhoneResponse,
     PhoneCreateRequest,

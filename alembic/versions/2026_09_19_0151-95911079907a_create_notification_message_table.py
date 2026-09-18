@@ -1,8 +1,8 @@
-"""create notifications table
+"""create notification message table
 
-Revision ID: 8d3490f25922
+Revision ID: 95911079907a
 Revises: 7a39e9910b11
-Create Date: 2026-09-14 16:10:41.806602
+Create Date: 2026-09-19 01:51:53.355413
 
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "8d3490f25922"
+revision: str = "95911079907a"
 down_revision: Union[str, Sequence[str], None] = "7a39e9910b11"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -34,7 +34,7 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "PENDING", "SENT", "FAILED", "PROCESSING", name="taskstatus"
+                "PENDING", "SENT", "FAILED", "PROCESSING", name="outboxstatus"
             ),
             nullable=False,
         ),

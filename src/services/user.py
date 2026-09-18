@@ -1,14 +1,11 @@
 import logging
+from contextlib import asynccontextmanager
 from typing import Callable
 from uuid import UUID
 
 from src.clients import ServicePhoneClient
-from src.config import RedisCache, ApplicationUnitOfWork
-from src.exceptions import IdempotencyConflictError
-from src.exceptions import (
-    NotFoundError,
-    AlreadyExistsError,
-)
+from src.config import RedisCache, RepositoryFactory, UnitOfWork, UserContext
+from src.exceptions import NotFoundError, AlreadyExistsError, IdempotencyConflictError
 from src.exceptions import ServiceUnavailableError
 from src.mappers import phone as phone_mapper, user as user_mapper
 from src.models import User, Phone, PhoneSyncStatus
@@ -28,12 +25,19 @@ class UserService:
     def __init__(
         self,
         phone_client: ServicePhoneClient,
-        uow_factory: Callable[[], ApplicationUnitOfWork],
+        uow_factory: Callable[[], UnitOfWork],
+        repository_factory: RepositoryFactory,
         redis: RedisCache,
     ) -> None:
-        self.uow_factory = uow_factory
+        self._uow_factory = uow_factory
+        self._repo_factory = repository_factory
         self.cache = redis
         self.client = phone_client
+
+    @asynccontextmanager
+    async def _tx(self):
+        async with self._uow_factory() as uow:
+            yield UserContext(uow=uow, repo_factory=self._repo_factory)
 
     async def create_user(
         self,
@@ -99,8 +103,8 @@ class UserService:
         await self.cache.delete(key)
 
     async def _delete_user(self, user_uuid: UUID) -> None:
-        async with self.uow_factory() as uow:
-            user = await uow.users.soft_delete_user(user_uuid=user_uuid)
+        async with self._tx() as tx:
+            user = await tx.users.soft_delete_user(user_uuid=user_uuid)
 
         self._check_user_exists(user=user, user_uuid=user_uuid)
 
@@ -109,10 +113,10 @@ class UserService:
         user_uuid: UUID,
         payload: UserUpdateRequest,
     ) -> User:
-        async with self.uow_factory() as uow:
+        async with self._tx() as tx:
             if payload.email:
-                await uow.users.lock_email(email=payload.email)
-                user_exists = await uow.users.get_user_by_email(
+                await tx.users.lock_email(email=payload.email)
+                user_exists = await tx.users.get_user_by_email(
                     email=payload.email, exclude_user_uuid=user_uuid
                 )
                 if user_exists:
@@ -120,7 +124,7 @@ class UserService:
                     raise AlreadyExistsError("User already exists")
 
             values = payload.model_dump(exclude_unset=True)
-            user = await uow.users.update_user(user_uuid=user_uuid, values=values)
+            user = await tx.users.update_user(user_uuid=user_uuid, values=values)
 
         self._check_user_exists(user=user, user_uuid=user_uuid)
 
@@ -131,17 +135,17 @@ class UserService:
     async def _create_user_with_phones(
         self, payload: UserCreateRequest
     ) -> tuple[User, list[Phone]]:
-        async with self.uow_factory() as uow:
+        async with self._tx() as tx:
             values = payload.model_dump(exclude={"phone_numbers"})
             values["phone_sync_status"] = PhoneSyncStatus.PENDING
-            user = await uow.users.create_user(values=values)
+            user = await tx.users.create_user(values=values)
             if user is None:
                 log.warning("User already exists with email=%s", payload.email)
                 raise AlreadyExistsError("User already exists")
             phones_payload = phone_mapper.schema_to_dict(
                 payload=payload, user_uuid=user.uuid
             )
-            phones = await uow.phones.create_phones(phones_payload=phones_payload)
+            phones = await tx.phones.create_phones(phones_payload=phones_payload)
 
             self._handle_existing_numbers(phones=phones, payload=payload.phone_numbers)
 
@@ -149,16 +153,16 @@ class UserService:
         return user, phones
 
     async def _get_user(self, user_uuid: UUID) -> User:
-        async with self.uow_factory() as uow:
-            user = await uow.users.get_user_with_phones(user_uuid=user_uuid)
+        async with self._tx() as tx:
+            user = await tx.users.get_user_with_phones(user_uuid=user_uuid)
             self._check_user_exists(user=user, user_uuid=user_uuid)
             return user
 
     async def _update_user_status(
         self, user_uuid: UUID, status: PhoneSyncStatus
     ) -> User:
-        async with self.uow_factory() as uow:
-            user = await uow.users.update_user_phone_status(
+        async with self._tx() as tx:
+            user = await tx.users.update_user_phone_status(
                 user_uuid=user_uuid, status=status
             )
             self._check_user_exists(user=user, user_uuid=user_uuid)

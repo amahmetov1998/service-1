@@ -1,27 +1,13 @@
-from datetime import datetime
-from typing import Any
 from uuid import UUID
 
-from pydantic import ConfigDict, BaseModel
+from pydantic import BaseModel
 
-from src.models import EventType, TaskStatus
+from src.models import NotificationType
 
 
 class OutboxEventSchema(BaseModel):
-    event_type: EventType
-    message_id: UUID
-    status: TaskStatus
-    payload: dict[str, Any]
-    retry_count: int
-    next_retry_at: datetime | None
-    processing_started_at: datetime | None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class SentNotificationResult(BaseModel):
-    uuid: UUID
-    attempt_id: UUID
-    next_retry_at: datetime | None
-    status: TaskStatus | None
-    retry_count: int
+    notification_uuid: UUID
+    user_uuid: UUID
+    type: NotificationType
+    title: str
+    message: str

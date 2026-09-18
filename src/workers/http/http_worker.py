@@ -1,10 +1,12 @@
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Callable
 
+from config import RepositoryFactory
 from src.clients import ServicePhoneClient
-from src.config import ApplicationUnitOfWork, RetryBackoffStrategy
+from src.config import UnitOfWork, RetryBackoffStrategy, HTTPWorkerContext
 from src.exceptions import (
     ServiceUnavailableError,
     AlreadyExistsError,
@@ -17,12 +19,13 @@ from src.schemas import UserSyncResult, IdempotencyHeaders
 log = logging.getLogger(__name__)
 
 
-class Worker:
+class HTTPWorker:
 
     def __init__(
         self,
         service_phone_client: ServicePhoneClient,
-        uow_factory: Callable[[], ApplicationUnitOfWork],
+        uow_factory: Callable[[], UnitOfWork],
+        repo_factory: RepositoryFactory,
         retry_backoff_strategy: RetryBackoffStrategy,
         pending_users_per_worker: int,
         stuck_users_per_worker: int,
@@ -31,11 +34,17 @@ class Worker:
     ) -> None:
         self.client = service_phone_client
         self.uow_factory = uow_factory
+        self.repo_factory = repo_factory
         self.retry_backoff_strategy = retry_backoff_strategy
         self.semaphore = asyncio.Semaphore(max_concurrent_tasks)
         self.pending_users_per_worker = pending_users_per_worker
         self.stuck_users_per_worker = stuck_users_per_worker
         self.processing_timeout = timedelta(seconds=processing_timeout_seconds)
+
+    @asynccontextmanager
+    async def _ctx(self):
+        async with self.uow_factory() as uow:
+            yield HTTPWorkerContext(uow=uow, repo_factory=self.repo_factory)
 
     async def run(self) -> None:
         users = await self._get_users()
@@ -92,18 +101,6 @@ class Worker:
                     status = PhoneSyncStatus.FAILED
                     retry_count = user.retry_count
                     next_retry_at = None
-
-            except Exception as e:
-                log.exception(
-                    "Unexpected client error while syncing user uuid=%s, error_type=%s, error=%s",
-                    user.uuid,
-                    type(e).__name__,
-                    e,
-                )
-                status = PhoneSyncStatus.FAILED
-                retry_count = user.retry_count
-                next_retry_at = None
-
         return UserSyncResult(
             uuid=user.uuid,
             attempt_id=user.attempt_id,
@@ -131,11 +128,11 @@ class Worker:
                 await uow.users.update_processed_users_status(users=users)
 
     async def _get_users(self) -> list[User]:
-        async with self.uow_factory() as uow:
-            pending_users = await uow.users.get_pending_users(
+        async with self._ctx() as ctx:
+            pending_users = await ctx.users.get_pending_users(
                 limit=self.pending_users_per_worker
             )
-            stuck_users = await uow.users.get_stuck_users(
+            stuck_users = await ctx.users.get_stuck_users(
                 limit=self.stuck_users_per_worker,
                 processing_timeout=self.processing_timeout,
             )
@@ -143,5 +140,5 @@ class Worker:
             processed_users = user_mapper.orm_to_dict(
                 users=processed, status=PhoneSyncStatus.PROCESSING
             )
-            await uow.users.update_users_status(users=processed_users)
+            await ctx.users.update_users_status(users=processed_users)
         return processed

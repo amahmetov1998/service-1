@@ -1,7 +1,8 @@
 from .error_codes import ErrorCode
 from .healthcheck import HealthStatus
 from .notification import NotificationType
-from .outbox_event import TaskStatus, EventType
+from .outbox_event import EventType
+from .outbox_status import OutboxStatus
 from .phone import (
     OperatorType,
     PhoneType,
@@ -18,6 +19,6 @@ __all__ = [
     "HealthStatus",
     "ErrorCode",
     "NotificationType",
-    "TaskStatus",
+    "OutboxStatus",
     "EventType",
 ]

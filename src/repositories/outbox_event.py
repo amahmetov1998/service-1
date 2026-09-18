@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy import insert, select, or_, Result, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models import OutboxEvent, EventType, TaskStatus
+from src.models import OutboxEvent, OutboxStatus, EventType
 
 
 class OutboxEventRepository:
@@ -14,12 +14,12 @@ class OutboxEventRepository:
     ) -> None:
         self.session = session
 
-    async def create_event(self, payload: dict[str, Any]) -> None:
+    async def create_event(self, event: dict[str, Any]) -> None:
 
         stmt = insert(OutboxEvent).values(
-            payload=payload,
+            payload=event,
             event_type=EventType.NOTIFICATION_CREATE,
-            status=TaskStatus.PENDING,
+            status=OutboxStatus.PENDING,
         )
         await self.session.execute(stmt)
 
@@ -27,7 +27,7 @@ class OutboxEventRepository:
         stmt = (
             select(OutboxEvent)
             .where(
-                OutboxEvent.status == TaskStatus.PENDING,
+                OutboxEvent.status == OutboxStatus.PENDING,
                 or_(
                     OutboxEvent.next_retry_at.is_(None),
                     OutboxEvent.next_retry_at <= func.now(),
@@ -45,7 +45,7 @@ class OutboxEventRepository:
         stmt = (
             select(OutboxEvent)
             .where(
-                OutboxEvent.status == TaskStatus.PROCESSING,
+                OutboxEvent.status == OutboxStatus.PROCESSING,
                 OutboxEvent.processing_started_at <= func.now() - processing_timeout,
             )
             .with_for_update(skip_locked=True)
