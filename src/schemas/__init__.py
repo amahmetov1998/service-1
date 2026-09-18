@@ -16,6 +16,10 @@ __all__ = [
     "InvalidFormatDetails",
     "IdempotencyHeaders",
     "IdempotencyConflictDetails",
+    "NotificationCreateRequest",
+    "NotificationCreateResponse",
+    "SentNotificationResult",
+    "OutboxEventSchema",
 ]
 
 from .errors import (
@@ -26,6 +30,12 @@ from .errors import (
     IdempotencyConflictDetails,
 )
 from .healthcheck import HealthCheck
+from .notification import (
+    NotificationCreateRequest,
+    NotificationCreateResponse,
+    SentNotificationResult,
+)
+from .outbox_event import OutboxEventSchema
 from .phone import (
     PhoneResponse,
     PhoneCreateRequest,

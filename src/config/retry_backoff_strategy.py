@@ -2,12 +2,12 @@ from datetime import timedelta
 
 
 class RetryBackoffStrategy:
-    def __init__(self, max_retry_count_per_user: int, max_backoff: int):
-        self.max_retry_count_per_user = max_retry_count_per_user
+    def __init__(self, max_retry_count_per_entity: int, max_backoff: int):
+        self.max_retry_count_per_entity = max_retry_count_per_entity
         self.max_backoff = timedelta(minutes=max_backoff)
 
     def can_retry(self, retry_count: int) -> bool:
-        return retry_count < self.max_retry_count_per_user
+        return retry_count < self.max_retry_count_per_entity
 
     def get_backoff(self, retry_count: int) -> timedelta:
         next_backoff = self._calc_next_backoff(retry_count)

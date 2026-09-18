@@ -6,7 +6,12 @@ from .enums import (
     RegionType,
     PhoneSyncStatus,
     ErrorCode,
+    NotificationType,
+    EventType,
+    OutboxStatus,
 )
+from .notification import Notification
+from .outbox_event import OutboxEvent
 from .phone import Phone
 from .user import User
 
@@ -20,4 +25,9 @@ __all__ = [
     "RegionType",
     "PhoneSyncStatus",
     "ErrorCode",
+    "OutboxEvent",
+    "Notification",
+    "NotificationType",
+    "EventType",
+    "OutboxStatus",
 ]

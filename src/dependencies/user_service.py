@@ -11,7 +11,7 @@ from src.services import UserService
 from .redis import get_redis
 from .service_phone_client import get_service_phone_client
 from .session_factory import get_session_factory
-from .uow import get_uow
+from .uow import get_uow_factory, get_repository_factory
 
 
 def get_user_service(
@@ -23,9 +23,11 @@ def get_user_service(
         ServicePhoneClient, Depends(get_service_phone_client)
     ],
 ) -> UserService:
-    uow_factory = get_uow(session_factory=session_factory)
+    uow_factory = get_uow_factory(session_factory=session_factory)
+    repository_factory = get_repository_factory()
     return UserService(
         phone_client=service_phone_client,
         uow_factory=uow_factory,
+        repository_factory=repository_factory,
         redis=redis,
     )

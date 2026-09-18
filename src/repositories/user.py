@@ -54,6 +54,15 @@ class UserRepository:
         user: User | None = result.scalar_one_or_none()
         return user
 
+    async def get_user(self, user_uuid: UUID) -> User | None:
+        stmt = select(User).where(
+            User.uuid == user_uuid,
+            User.is_deleted.is_(False),
+        )
+        result: Result = await self.session.execute(stmt)
+        user: User | None = result.scalar_one_or_none()
+        return user
+
     async def soft_delete_user(self, user_uuid: UUID) -> User | None:
         stmt = (
             update(User)
@@ -131,7 +140,7 @@ class UserRepository:
             )
         )
 
-    async def update_users_status(self, users: list[dict[str, str]]) -> None:
+    async def update_processed_users_status(self, users: list[dict[str, str]]) -> None:
         for user in users:
             stmt = (
                 update(User)
@@ -144,6 +153,20 @@ class UserRepository:
                     retry_count=user["retry_count"],
                     next_retry_at=user["next_retry_at"],
                     processing_started_at=None,
+                )
+            )
+            await self.session.execute(stmt)
+
+    async def update_users_status(self, users: list[dict[str, str]]) -> None:
+        for user in users:
+            stmt = (
+                update(User)
+                .where(User.uuid == user["uuid"])
+                .values(
+                    phone_sync_status=user["phone_sync_status"],
+                    retry_count=user["retry_count"],
+                    next_retry_at=user["next_retry_at"],
+                    processing_started_at=user["processing_started_at"],
                 )
             )
             await self.session.execute(stmt)
