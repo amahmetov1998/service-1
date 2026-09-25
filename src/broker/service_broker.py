@@ -23,7 +23,7 @@ def handle_transport_errors(request_func):
             log.warning(
                 "Broker not available. Error type=%s, error=%s", type(e).__name__, e
             )
-            raise BrokerUnavailableError("Broker unavailable")
+            raise BrokerUnavailableError("Broker unavailable") from e
 
     return wrapper
 

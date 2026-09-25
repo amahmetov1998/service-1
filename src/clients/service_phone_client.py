@@ -48,7 +48,7 @@ def handle_transport_errors(request_func):
             log.warning(
                 "Service not available. Error type=%s, error=%s", type(e).__name__, e
             )
-            raise ServiceUnavailableError("Phone service unavailable")
+            raise ServiceUnavailableError("Phone service unavailable") from e
 
     return wrapper
 

@@ -1,8 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
-from typing import Callable
+from typing import Annotated
 
-from src.config import UnitOfWork, RepositoryFactory, NotificationContext
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+from src.config import RepositoryFactory, NotificationContext
+from src.dependencies import get_session_factory
 from src.exceptions import NotFoundError
 from src.mappers import outbox_event as outbox_event_mapper
 from src.schemas import (
@@ -16,16 +20,21 @@ log = logging.getLogger(__name__)
 class NotificationService:
     def __init__(
         self,
-        uow_factory: Callable[[], UnitOfWork],
+        session_factory: Annotated[
+            async_sessionmaker[AsyncSession], Depends(get_session_factory)
+        ],
         repo_factory: RepositoryFactory,
     ) -> None:
-        self.uow_factory = uow_factory
+        self.session_factory = session_factory
         self.repo_factory = repo_factory
 
     @asynccontextmanager
     async def _tx(self):
-        async with self.uow_factory() as uow:
-            yield NotificationContext(uow=uow, repo_factory=self.repo_factory)
+        async with self.session_factory() as session:
+            async with session.begin():
+                yield NotificationContext(
+                    session=session, repo_factory=self.repo_factory
+                )
 
     async def create_notification(
         self, payload: NotificationCreateRequest

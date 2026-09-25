@@ -167,6 +167,7 @@ class UserRepository:
                     retry_count=user["retry_count"],
                     next_retry_at=user["next_retry_at"],
                     processing_started_at=user["processing_started_at"],
+                    attempt_id=user["attempt_id"],
                 )
             )
             await self.session.execute(stmt)

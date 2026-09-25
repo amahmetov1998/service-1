@@ -64,6 +64,7 @@ class OutboxEventRepository:
                     retry_count=event["retry_count"],
                     next_retry_at=event["next_retry_at"],
                     processing_started_at=event["processing_started_at"],
+                    attempt_id=event["attempt_id"],
                 )
             )
             await self.session.execute(stmt)
