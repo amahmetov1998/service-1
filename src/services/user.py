@@ -136,16 +136,17 @@ class UserService:
         self, payload: UserCreateRequest
     ) -> tuple[User, list[Phone]]:
         async with self._tx() as tx:
-            values = payload.model_dump(exclude={"phone_numbers"})
-            values["phone_sync_status"] = PhoneSyncStatus.PENDING
-            user = await tx.users.create_user(values=values)
+            user_payload = user_mapper.request_to_orm(
+                payload=payload, status=PhoneSyncStatus.PENDING
+            )
+            user = await tx.users.create_user(user=user_payload)
             if user is None:
                 log.warning("User already exists with email=%s", payload.email)
                 raise AlreadyExistsError("User already exists")
             phones_payload = phone_mapper.schema_to_dict(
                 payload=payload, user_uuid=user.uuid
             )
-            phones = await tx.phones.create_phones(phones_payload=phones_payload)
+            phones = await tx.phones.create_phones(phones=phones_payload)
 
             self._handle_existing_numbers(phones=phones, payload=payload.phone_numbers)
 

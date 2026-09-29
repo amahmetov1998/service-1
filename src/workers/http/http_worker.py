@@ -1,12 +1,17 @@
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Callable
 
-from config import RepositoryFactory
 from src.clients import ServicePhoneClient
-from src.config import UnitOfWork, RetryBackoffStrategy, HTTPWorkerContext
+from src.config import (
+    UnitOfWork,
+    RetryBackoffStrategy,
+    HTTPWorkerContext,
+    RepositoryFactory,
+)
 from src.exceptions import (
     ServiceUnavailableError,
     AlreadyExistsError,
@@ -54,60 +59,61 @@ class HTTPWorker:
             await self._apply_sync_results(results=results)
 
     async def sync_user(self, user: User) -> UserSyncResult:
-        service_payload = phone_mapper.orm_to_schemas(
-            phones=user.phone_numbers,
-        )
-        headers = IdempotencyHeaders(idempotency_key=str(user.operation_id))
-        async with self.semaphore:
-            try:
+        try:
+            service_payload = phone_mapper.orm_to_schemas(
+                phones=user.phone_numbers,
+            )
+            headers = IdempotencyHeaders(idempotency_key=str(user.operation_id))
+            async with self.semaphore:
                 await self.client.send_phones(payload=service_payload, headers=headers)
                 log.info(
                     "Phone data synchronized successfully for user uuid=%s",
                     user.uuid,
                 )
-                status = PhoneSyncStatus.DONE
-                retry_count = 0
-                next_retry_at = None
-
-            except AlreadyExistsError as e:
-                log.warning(
-                    "Phone data synchronized failed. user uuid=%s, error_type=%s, error=%s",
-                    user.uuid,
-                    type(e).__name__,
-                    e,
+                return UserSyncResult(
+                    uuid=user.uuid,
+                    attempt_id=user.attempt_id,
+                    next_retry_at=None,
+                    retry_count=0,
+                    phone_sync_status=PhoneSyncStatus.DONE,
                 )
-                status = None
-                retry_count = 0
-                next_retry_at = None
-            except IdempotencyConflictError as e:
-                log.warning(
-                    "Phone data synchronized failed. Error type=%s, error=%s",
-                    type(e).__name__,
-                    e,
-                )
-                status = PhoneSyncStatus.FAILED
-                retry_count = user.retry_count
-                next_retry_at = None
-            except ServiceUnavailableError:
-                if self.retry_backoff_strategy.can_retry(retry_count=user.retry_count):
-                    backoff = self.retry_backoff_strategy.get_backoff(
-                        retry_count=user.retry_count
-                    )
-                    status = PhoneSyncStatus.PENDING
-                    retry_count = user.retry_count + 1
-                    next_retry_at = datetime.now(timezone.utc) + backoff
 
-                else:
-                    status = PhoneSyncStatus.FAILED
-                    retry_count = user.retry_count
-                    next_retry_at = None
-        return UserSyncResult(
-            uuid=user.uuid,
-            attempt_id=user.attempt_id,
-            next_retry_at=next_retry_at,
-            retry_count=retry_count,
-            phone_sync_status=status,
-        )
+        except AlreadyExistsError as e:
+            log.warning(
+                "Phone data synchronized failed. user uuid=%s, error_type=%s, error=%s",
+                user.uuid,
+                type(e).__name__,
+                e,
+            )
+            return UserSyncResult(
+                uuid=user.uuid,
+                attempt_id=user.attempt_id,
+                next_retry_at=None,
+                retry_count=0,
+                phone_sync_status=None,
+            )
+        except IdempotencyConflictError as e:
+            log.warning(
+                "Phone data synchronized failed. Error type=%s, error=%s",
+                type(e).__name__,
+                e,
+            )
+            return UserSyncResult(
+                uuid=user.uuid,
+                attempt_id=user.attempt_id,
+                next_retry_at=None,
+                retry_count=user.retry_count,
+                phone_sync_status=PhoneSyncStatus.FAILED,
+            )
+        except ServiceUnavailableError:
+            return self._get_retry_result(user=user)
+        except Exception as e:
+            log.exception(
+                "Unexpected error while sending data to service. Error type=%s, error=%s",
+                type(e).__name__,
+                e,
+            )
+            return self._get_retry_result(user=user)
 
     async def _apply_sync_results(self, results: list[UserSyncResult]) -> None:
         deleted_user_data = [
@@ -119,13 +125,13 @@ class HTTPWorker:
         processed_user_data = [
             result for result in results if result.phone_sync_status is not None
         ]
-        users = user_mapper.schema_to_dict(results=processed_user_data)
+        users = user_mapper.schema_to_orm(results=processed_user_data)
 
-        async with self.uow_factory() as uow:
+        async with self._ctx() as ctx:
             if deleted_user_data:
-                await uow.users.soft_delete_users(deleted_user_data=deleted_user_data)
+                await ctx.users.soft_delete_users(deleted_user_data=deleted_user_data)
             if processed_user_data:
-                await uow.users.update_processed_users_status(users=users)
+                await ctx.users.update_processed_users_status(users=users)
 
     async def _get_users(self) -> list[User]:
         async with self._ctx() as ctx:
@@ -136,9 +142,36 @@ class HTTPWorker:
                 limit=self.stuck_users_per_worker,
                 processing_timeout=self.processing_timeout,
             )
-            processed = pending_users + stuck_users
-            processed_users = user_mapper.orm_to_dict(
-                users=processed, status=PhoneSyncStatus.PROCESSING
+            users = pending_users + stuck_users
+            await self._update_user_fields(users=users)
+            await ctx.users.update_users_status(
+                users=users, status=PhoneSyncStatus.PROCESSING
             )
-            await ctx.users.update_users_status(users=processed_users)
-        return processed
+        return users
+
+    async def _update_user_fields(self, users: list[User]) -> None:
+        for user in users:
+            user.attempt_id = uuid.uuid4()
+            user.processing_started_at = datetime.now(timezone.utc)
+
+    def _get_retry_result(self, user: User) -> UserSyncResult:
+        if self.retry_backoff_strategy.can_retry(retry_count=user.retry_count):
+            backoff = self.retry_backoff_strategy.get_backoff(
+                retry_count=user.retry_count
+            )
+
+            return UserSyncResult(
+                uuid=user.uuid,
+                attempt_id=user.attempt_id,
+                phone_sync_status=PhoneSyncStatus.PENDING,
+                retry_count=user.retry_count + 1,
+                next_retry_at=datetime.now(timezone.utc) + backoff,
+            )
+
+        return UserSyncResult(
+            uuid=user.uuid,
+            attempt_id=user.attempt_id,
+            next_retry_at=None,
+            retry_count=user.retry_count,
+            phone_sync_status=PhoneSyncStatus.FAILED,
+        )

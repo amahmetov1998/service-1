@@ -4,7 +4,6 @@ from .context import (
     UserContext,
     BrokerWorkerContext,
     HTTPWorkerContext,
-    NotificationContext,
 )
 from .db import create_engine, create_session_factory
 from .logging import configure_logging
@@ -25,5 +24,4 @@ __all__ = [
     "UserContext",
     "BrokerWorkerContext",
     "HTTPWorkerContext",
-    "NotificationContext",
 ]

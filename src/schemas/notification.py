@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from src.models import OutboxStatus, NotificationType
 
@@ -14,7 +14,10 @@ class NotificationCreateRequest(BaseModel):
 
 
 class NotificationCreateResponse(NotificationCreateRequest):
-    pass
+
+    model_config = ConfigDict(from_attributes=True)
+
+    uuid: UUID
 
 
 class SentNotificationResult(BaseModel):

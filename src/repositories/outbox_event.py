@@ -1,10 +1,9 @@
 from datetime import timedelta
-from typing import Any
 
-from sqlalchemy import insert, select, or_, Result, func, update
+from sqlalchemy import select, or_, Result, func, update, bindparam
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models import OutboxEvent, OutboxStatus, EventType
+from src.models import OutboxEvent, OutboxStatus
 
 
 class OutboxEventRepository:
@@ -14,16 +13,11 @@ class OutboxEventRepository:
     ) -> None:
         self.session = session
 
-    async def create_event(self, event: dict[str, Any]) -> None:
+    async def create_event(self, event: OutboxEvent) -> OutboxEvent:
+        self.session.add(event)
+        return event
 
-        stmt = insert(OutboxEvent).values(
-            payload=event,
-            event_type=EventType.NOTIFICATION_CREATE,
-            status=OutboxStatus.PENDING,
-        )
-        await self.session.execute(stmt)
-
-    async def get_pending(self, limit):
+    async def get_pending(self, limit: int) -> list[OutboxEvent]:
         stmt = (
             select(OutboxEvent)
             .where(
@@ -54,36 +48,38 @@ class OutboxEventRepository:
         result: Result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def update_events_status(self, events: list[dict[str, str]]) -> None:
-        for event in events:
-            stmt = (
-                update(OutboxEvent)
-                .where(OutboxEvent.uuid == event["uuid"])
-                .values(
-                    status=event["status"],
-                    retry_count=event["retry_count"],
-                    next_retry_at=event["next_retry_at"],
-                    processing_started_at=event["processing_started_at"],
-                    attempt_id=event["attempt_id"],
-                )
-            )
-            await self.session.execute(stmt)
+    async def bulk_update_events_status(self, events: list[dict[str, str]]) -> None:
+        table = OutboxEvent.__table__
 
-    async def update_processed_events_status(
+        stmt = (
+            update(table)
+            .where(table.c.uuid == bindparam("event_uuid"))
+            .values(
+                status=bindparam("status"),
+                retry_count=bindparam("retry_count"),
+                next_retry_at=bindparam("next_retry_at"),
+                processing_started_at=bindparam("processing_started_at"),
+                attempt_id=bindparam("attempt_id"),
+            )
+        )
+
+        await self.session.execute(stmt, events)
+
+    async def bulk_update_processed_events_status(
         self, events: list[dict[str, str]]
     ) -> None:
-        for event in events:
-            stmt = (
-                update(OutboxEvent)
-                .where(
-                    OutboxEvent.uuid == event["uuid"],
-                    OutboxEvent.attempt_id == event["attempt_id"],
-                )
-                .values(
-                    status=event["status"],
-                    retry_count=event["retry_count"],
-                    next_retry_at=event["next_retry_at"],
-                    processing_started_at=None,
-                )
+        table = OutboxEvent.__table__
+        stmt = (
+            update(table)
+            .where(
+                table.c.uuid == bindparam("event_uuid"),
+                table.c.attempt_id == bindparam("event_attempt_id"),
             )
-            await self.session.execute(stmt)
+            .values(
+                status=bindparam("status"),
+                retry_count=bindparam("retry_count"),
+                next_retry_at=bindparam("next_retry_at"),
+                processing_started_at=None,
+            )
+        )
+        await self.session.execute(stmt, events)

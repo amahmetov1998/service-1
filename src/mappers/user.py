@@ -1,13 +1,10 @@
-import uuid
-from datetime import datetime, timezone
-from typing import Any
-
 from src.models import User, Phone, PhoneSyncStatus
 from src.schemas import (
     PhoneDetailAPIResponse,
     PhoneResponse,
     UserPhonesResponse,
     UserSyncResult,
+    UserCreateRequest,
 )
 
 
@@ -61,19 +58,23 @@ def orm_to_schema(user: User, phones: list[Phone]) -> UserPhonesResponse:
     )
 
 
-def schema_to_dict(results: list[UserSyncResult]) -> list[dict[str, str]]:
-    return [user.model_dump() for user in results]
-
-
-def orm_to_dict(users: list[User], status: PhoneSyncStatus) -> list[dict[str, Any]]:
+def schema_to_orm(results: list[UserSyncResult]) -> list[User]:
     return [
-        {
-            "uuid": user.uuid,
-            "phone_sync_status": status,
-            "retry_count": user.retry_count,
-            "next_retry_at": user.next_retry_at,
-            "processing_started_at": datetime.now(timezone.utc),
-            "attempt_id": uuid.uuid4(),
-        }
-        for user in users
+        User(
+            uuid=result.uuid,
+            attempt_id=result.attempt_id,
+            next_retry_at=result.next_retry_at,
+            phone_sync_status=result.phone_sync_status,
+            retry_count=result.retry_count,
+        )
+        for result in results
     ]
+
+
+def request_to_orm(payload: UserCreateRequest, status: PhoneSyncStatus) -> User:
+    return User(
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        email=payload.email,
+        phone_sync_status=status,
+    )
