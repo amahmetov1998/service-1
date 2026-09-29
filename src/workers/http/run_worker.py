@@ -13,8 +13,8 @@ from src.config import (
     configure_logging,
     RetryBackoffStrategy,
 )
-from src.dependencies import get_uow
-from src.worker.main_worker import Worker
+from src.dependencies import get_uow_factory, get_repository_factory
+from src.workers.http import HTTPWorker
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ async def run_worker():
         max_retry_budget=settings.retry.max_retry_budget,
     )
     retry_backoff_strategy = RetryBackoffStrategy(
-        max_retry_count_per_user=settings.worker.max_retry_count_per_user,
+        max_retry_count_per_entity=settings.worker.max_retry_count_per_user,
         max_backoff=settings.worker.max_backoff_minutes,
     )
     service_phone_client = ServicePhoneClient(
@@ -40,10 +40,12 @@ async def run_worker():
     )
     engine = create_engine(settings.db.url)
     session_factory = create_session_factory(engine)
-    uow_factory = get_uow(session_factory)
-    worker = Worker(
+    uow_factory = get_uow_factory(session_factory)
+    repo_factory = get_repository_factory()
+    worker = HTTPWorker(
         service_phone_client=service_phone_client,
         uow_factory=uow_factory,
+        repo_factory=repo_factory,
         pending_users_per_worker=settings.worker.pending_users_per_worker,
         stuck_users_per_worker=settings.worker.stuck_users_per_worker,
         max_concurrent_tasks=settings.worker.max_concurrent_tasks,

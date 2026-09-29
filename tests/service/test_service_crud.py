@@ -1,6 +1,6 @@
 import pytest
 
-from src.dependencies import get_uow
+from src.dependencies import get_uow_factory, get_repository_factory
 from src.exceptions import NotFoundError
 from src.models import PhoneSyncStatus
 from src.schemas import UserCreateRequest, UserUpdateRequest
@@ -14,14 +14,16 @@ async def test_user_service_crud(
     override_get_service_phone_client,
     user_service_payload,
 ):
-    uow_factory = get_uow(
+    uow_factory = get_uow_factory(
         session_factory=override_get_session_factory,
     )
+    repository_factory = get_repository_factory()
 
     service = UserService(
         phone_client=override_get_service_phone_client,
         uow_factory=uow_factory,
         redis=override_get_redis,
+        repository_factory=repository_factory,
     )
 
     payload = UserCreateRequest.model_validate(user_service_payload)

@@ -1,5 +1,4 @@
 from datetime import timedelta
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, update, func, or_, tuple_
@@ -20,11 +19,16 @@ class UserRepository:
 
     async def create_user(
         self,
-        values: dict[str, Any],
+        user: User,
     ) -> User | None:
         stmt = (
             insert(User)
-            .values(**values)
+            .values(
+                first_name=user.first_name,
+                last_name=user.last_name,
+                email=user.email,
+                phone_sync_status=user.phone_sync_status,
+            )
             .on_conflict_do_nothing(index_elements=[User.email])
             .returning(User)
         )
@@ -49,6 +53,15 @@ class UserRepository:
                 User.is_deleted.is_(False),
             )
             .options(selectinload(User.phone_numbers))
+        )
+        result: Result = await self.session.execute(stmt)
+        user: User | None = result.scalar_one_or_none()
+        return user
+
+    async def get_user(self, user_uuid: UUID) -> User | None:
+        stmt = select(User).where(
+            User.uuid == user_uuid,
+            User.is_deleted.is_(False),
         )
         result: Result = await self.session.execute(stmt)
         user: User | None = result.scalar_one_or_none()
@@ -131,20 +144,36 @@ class UserRepository:
             )
         )
 
-    async def update_users_status(self, users: list[dict[str, str]]) -> None:
+    async def update_processed_users_status(self, users: list[User]) -> None:
         for user in users:
             stmt = (
                 update(User)
                 .where(
-                    User.uuid == user["uuid"],
-                    User.attempt_id == user["attempt_id"],
+                    User.uuid == user.uuid,
+                    User.attempt_id == user.attempt_id,
                 )
                 .values(
-                    phone_sync_status=user["phone_sync_status"],
-                    retry_count=user["retry_count"],
-                    next_retry_at=user["next_retry_at"],
+                    phone_sync_status=user.phone_sync_status,
+                    retry_count=user.retry_count,
+                    next_retry_at=user.next_retry_at,
                     processing_started_at=None,
                 )
+            )
+            await self.session.execute(stmt)
+
+    async def update_users_status(
+        self, users: list[User], status: PhoneSyncStatus
+    ) -> None:
+        for user in users:
+            stmt = (
+                update(User)
+                .where(User.uuid == user.uuid)
+                .values(
+                    phone_sync_status=status,
+                    processing_started_at=user.processing_started_at,
+                    attempt_id=user.attempt_id,
+                )
+                .execution_options(synchronize_session=False)
             )
             await self.session.execute(stmt)
 
