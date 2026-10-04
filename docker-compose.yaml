@@ -1,37 +1,6 @@
 name: service-1
 
 services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: service-1
-    env_file:
-      - src/.env
-    ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: service-1-worker
-    env_file:
-      - src/.env
-    command: [ "python", "-m", "src.worker.run_worker" ]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
   postgres:
     image: postgres:16
     container_name: bd-1
@@ -42,7 +11,7 @@ services:
     ports:
       - "5434:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U user -d postgres" ]
+      test: [ "CMD-SHELL", "pg_isready -U user -d service-1" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -59,3 +28,58 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka-1
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://0.0.0.0:9092,CONTROLLER://kafka:29093 # на каких адресах kafka принимает подключения
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092 # какие адреса kafka сообщает клиенту
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  kafka-init:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - kafka
+    command:
+      - sh
+      - -c
+      - |
+        kafka-topics --bootstrap-server kafka:29092 \
+          --create \
+          --if-not-exists \
+          --topic notifications \
+          --partitions 3 \
+          --replication-factor 1
+        
+        kafka-topics --bootstrap-server kafka:29092 \
+          --create \
+          --if-not-exists \
+          --topic notifications.dlq \
+          --partitions 3 \
+          --replication-factor 1
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      - kafka

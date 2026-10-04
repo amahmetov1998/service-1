@@ -31,9 +31,11 @@ class User(Base):
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    operation_id: Mapped[UUID] = mapped_column(default=uuid4)
+    operation_id: Mapped[UUID] = mapped_column(default=uuid4)  # для идемпотентности
 
     processing_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
-    attempt_id: Mapped[UUID] = mapped_column(default=uuid4)
+    attempt_id: Mapped[UUID] = mapped_column(
+        default=uuid4
+    )  # для возобновления зависших задач

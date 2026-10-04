@@ -71,6 +71,23 @@ class WorkerConfig(BaseModel):
     max_backoff_minutes: int
     poll_interval: int
     processing_timeout_seconds: int
+    max_retry_count_per_user: int
+    max_backoff_minutes: int
+
+
+class BrokerProducerConfig(BaseModel):
+    url: str
+    acks: str
+    enable_idempotence: bool
+    notification_topic_name: str
+    linger_ms: int  # сколько подождать, чтобы собрать несколько сообщений перед отправкой в брокер
+    max_batch_size: int
+    poll_interval: int
+    max_retry_count_per_entity: int
+    pending_tasks_per_publisher: int
+    stuck_tasks_per_publisher: int
+    processing_timeout_sec: int
+    max_backoff_minutes: int
 
 
 class Settings(BaseSettings):
@@ -90,6 +107,7 @@ class Settings(BaseSettings):
     redis: RedisConfig
     db: DatabaseConfig
     worker: WorkerConfig
+    broker: BrokerProducerConfig
 
 
 settings = Settings()

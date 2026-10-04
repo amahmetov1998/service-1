@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,11 +13,11 @@ class PhoneRepository:
     ) -> None:
         self.session = session
 
-    async def create_phones(self, phones_payload: list[dict]) -> list[Phone]:
+    async def create_phones(self, phones: list[dict[str, Any]]) -> list[Phone]:
         result = await self.session.execute(
             insert(Phone)
             .on_conflict_do_nothing(index_elements=[Phone.phone_number])
             .returning(Phone),
-            phones_payload,
+            phones,
         )
         return list(result.scalars().all())

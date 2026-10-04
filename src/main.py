@@ -4,7 +4,7 @@ import logging
 import uvicorn
 from fastapi import FastAPI
 
-from src.api import healthcheck_router, user_phones_router
+from src.api import healthcheck_router, user_phones_router, notification_router
 from src.application import create_app
 from src.config import configure_logging
 from src.config import settings
@@ -21,6 +21,7 @@ def get_app() -> FastAPI:
     register_errors_handlers(app)
     app.include_router(healthcheck_router)
     app.include_router(user_phones_router)
+    app.include_router(notification_router)
     return app
 
 
